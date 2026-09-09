@@ -90,6 +90,14 @@
       this.currentSize = BRUSH_SIZES[sizeKey] || sizeKey || BRUSH_SIZES.medium;
     }
 
+    setLineWidth(width) {
+      if (typeof width === 'number') {
+        this.currentSize = width;
+      } else {
+        this.setSize(width);
+      }
+    }
+
     getRelativePos(e) {
       const rect = this.canvas.getBoundingClientRect();
       let clientX, clientY;
@@ -97,19 +105,28 @@
       if (e.touches && e.touches.length > 0) {
         clientX = e.touches[0].clientX;
         clientY = e.touches[0].clientY;
+      } else if (e.changedTouches && e.changedTouches.length > 0) {
+        clientX = e.changedTouches[0].clientX;
+        clientY = e.changedTouches[0].clientY;
       } else {
         clientX = e.clientX;
         clientY = e.clientY;
       }
 
-      const x = (clientX - rect.left) / rect.width;
-      const y = (clientY - rect.top) / rect.height;
+      const rectW = rect.width || 1;
+      const rectH = rect.height || 1;
+
+      const x = (clientX - rect.left) / rectW;
+      const y = (clientY - rect.top) / rectH;
+
+      const clampedRx = Math.max(0, Math.min(1, x));
+      const clampedRy = Math.max(0, Math.min(1, y));
 
       return {
-        rx: Math.max(0, Math.min(1, x)),
-        ry: Math.max(0, Math.min(1, y)),
-        x: Math.max(0, Math.min(1, x)) * this.logicalWidth,
-        y: Math.max(0, Math.min(1, y)) * this.logicalHeight
+        rx: clampedRx,
+        ry: clampedRy,
+        x: clampedRx * this.logicalWidth,
+        y: clampedRy * this.logicalHeight
       };
     }
 

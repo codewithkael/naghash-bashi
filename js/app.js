@@ -29,7 +29,8 @@
     currentWord: null,
     turnTimerInterval: null,
     wordSelectionTimeout: null,
-    deferredPrompt: null
+    deferredPrompt: null,
+    unreadChatCount: 0
   };
 
   // DOM Elements
@@ -74,6 +75,18 @@
     els.btnLeaveGame = document.getElementById('btn-leave-game');
     els.scoreboardList = document.getElementById('scoreboard-list');
 
+    // Mobile Top Bar & Drawer Controls
+    els.btnToggleScores = document.getElementById('btn-toggle-scores');
+    els.btnToggleChat = document.getElementById('btn-toggle-chat');
+    els.btnCloseScores = document.getElementById('btn-close-scoreboard');
+    els.btnCloseChat = document.getElementById('btn-close-chat');
+    els.drawerBackdrop = document.getElementById('drawer-backdrop');
+    els.sidebarScoreboard = document.getElementById('sidebar-scoreboard');
+    els.sidebarChat = document.getElementById('sidebar-chat');
+    els.mobilePlayerRibbon = document.getElementById('mobile-player-ribbon');
+    els.mobileMyRank = document.getElementById('mobile-my-rank');
+    els.chatUnreadBadge = document.getElementById('chat-unread-badge');
+
     // Canvas & Tools
     els.drawingCanvas = document.getElementById('drawing-canvas');
     els.drawingToolbar = document.getElementById('drawing-toolbar');
@@ -82,6 +95,13 @@
     els.toolButtons = document.querySelectorAll('.tool-btn');
     els.btnClear = document.getElementById('tool-clear');
     els.btnUndo = document.getElementById('tool-undo');
+
+    // Guesser Toolbar & Live Ticker
+    els.guesserToolbar = document.getElementById('guesser-toolbar');
+    els.recentChatTicker = document.getElementById('recent-chat-ticker');
+    els.quickGuessForm = document.getElementById('quick-guess-form');
+    els.quickGuessInput = document.getElementById('quick-guess-input');
+    els.quickGuessSendBtn = document.getElementById('quick-guess-send-btn');
 
     // Chat
     els.chatMessages = document.getElementById('chat-messages');
@@ -105,6 +125,61 @@
     els.btnBackLobby = document.getElementById('btn-back-lobby');
   }
 
+  function closeAllDrawers() {
+    if (els.sidebarScoreboard) els.sidebarScoreboard.classList.remove('open');
+    if (els.sidebarChat) els.sidebarChat.classList.remove('open');
+    if (els.drawerBackdrop) els.drawerBackdrop.classList.remove('active');
+  }
+
+  function toggleScoreboardDrawer() {
+    const isOpen = els.sidebarScoreboard && els.sidebarScoreboard.classList.contains('open');
+    closeAllDrawers();
+    if (!isOpen && els.sidebarScoreboard) {
+      els.sidebarScoreboard.classList.add('open');
+      if (els.drawerBackdrop) els.drawerBackdrop.classList.add('active');
+      if (navigator.vibrate) navigator.vibrate([20]);
+    }
+  }
+
+  function toggleChatDrawer() {
+    const isOpen = els.sidebarChat && els.sidebarChat.classList.contains('open');
+    closeAllDrawers();
+    if (!isOpen && els.sidebarChat) {
+      els.sidebarChat.classList.add('open');
+      if (els.drawerBackdrop) els.drawerBackdrop.classList.add('active');
+      state.unreadChatCount = 0;
+      if (els.chatUnreadBadge) els.chatUnreadBadge.style.display = 'none';
+      if (navigator.vibrate) navigator.vibrate([20]);
+    }
+  }
+
+  function updateToolbarsState() {
+    if (els.drawingToolbar) {
+      els.drawingToolbar.style.display = state.isDrawer ? 'flex' : 'none';
+    }
+    if (els.guesserToolbar) {
+      els.guesserToolbar.style.display = state.isDrawer ? 'none' : 'flex';
+    }
+  }
+
+  function updateInputState() {
+    const isDrawing = state.isDrawer;
+    if (els.chatInput) {
+      els.chatInput.disabled = isDrawing;
+      els.chatInput.placeholder = isDrawing ? 'شما در حال نقاشی هستید 🎨' : 'حدس خود را اینجا بنویسید...';
+    }
+    if (els.chatSendBtn) {
+      els.chatSendBtn.disabled = isDrawing;
+    }
+    if (els.quickGuessInput) {
+      els.quickGuessInput.disabled = isDrawing;
+      els.quickGuessInput.placeholder = isDrawing ? 'شما در حال نقاشی هستید 🎨' : 'حدس خود را اینجا بنویسید...';
+    }
+    if (els.quickGuessSendBtn) {
+      els.quickGuessSendBtn.disabled = isDrawing;
+    }
+  }
+
   function showView(viewName) {
     if (state.currentView === viewName && els[`screen${capitalize(viewName)}`]?.classList.contains('active')) {
       return;
@@ -115,10 +190,16 @@
     els.screenGame.classList.toggle('active', viewName === 'game');
     els.screenGameOver.classList.toggle('active', viewName === 'gameover');
 
-    if (viewName === 'game' && state.canvas) {
-      setTimeout(() => {
-        state.canvas.setupCanvas();
-      }, 60);
+    closeAllDrawers();
+
+    if (viewName === 'game') {
+      updateToolbarsState();
+      updateInputState();
+      if (state.canvas) {
+        setTimeout(() => {
+          state.canvas.setupCanvas();
+        }, 60);
+      }
     }
   }
 
@@ -162,12 +243,13 @@
     AVATARS.forEach((av) => {
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = 'avatar-choice-btn' + (av === state.myAvatar ? ' selected' : '');
+      btn.className = 'avatar-opt avatar-choice-btn' + (av === state.myAvatar ? ' selected' : '');
       btn.textContent = av;
       btn.setAttribute('aria-label', `انتخاب آواتار ${av}`);
       btn.addEventListener('click', () => {
         state.myAvatar = av;
         localStorage.setItem('naghash_player_avatar', av);
+        if (navigator.vibrate) navigator.vibrate([15]);
         renderAvatarPicker();
       });
       els.avatarGrid.appendChild(btn);
@@ -690,7 +772,8 @@
       state.canvas.clear(false);
       state.canvas.setInteractive(state.isDrawer);
     }
-    els.drawingToolbar.style.display = state.isDrawer ? 'flex' : 'none';
+    updateToolbarsState();
+    updateInputState();
 
     if (drawer.isBot) {
       // Bot drawer: auto selects random word after 1.5s
@@ -761,13 +844,11 @@
           state.canvas.clear(false);
           state.canvas.setInteractive(true);
         }
-        els.drawingToolbar.style.display = 'flex';
+        updateToolbarsState();
         els.wordDisplay.textContent = `کلمه شما برای نقاشی: ${c.word} ✏️`;
         els.wordCategoryBadge.textContent = `دسته‌بندی: ${c.category}`;
         els.wordCategoryBadge.style.display = 'inline-block';
-        els.chatInput.disabled = true;
-        els.chatInput.placeholder = 'شما در حال نقاشی هستید 🎨';
-        els.chatSendBtn.disabled = true;
+        updateInputState();
 
         if (state.isHost) {
           const result = state.gameRoom.selectWord(c);
@@ -887,7 +968,7 @@
       state.canvas.setInteractive(state.isDrawer);
     }
 
-    els.drawingToolbar.style.display = state.isDrawer ? 'flex' : 'none';
+    updateToolbarsState();
 
     if (state.isDrawer) {
       if (data.wordObj) {
@@ -898,18 +979,14 @@
         els.wordCategoryBadge.textContent = `دسته‌بندی: ${state.currentWord.category}`;
         els.wordCategoryBadge.style.display = 'inline-block';
       }
-      els.chatInput.disabled = true;
-      els.chatInput.placeholder = 'شما در حال نقاشی هستید 🎨';
-      els.chatSendBtn.disabled = true;
     } else {
       state.currentWord = null;
       els.wordDisplay.textContent = data.masked || '---';
       els.wordCategoryBadge.textContent = `دسته‌بندی: ${data.category || ''}`;
       els.wordCategoryBadge.style.display = 'inline-block';
-      els.chatInput.disabled = false;
-      els.chatInput.placeholder = 'حدس خود را تایپ و ارسال کنید...';
-      els.chatSendBtn.disabled = false;
     }
+
+    updateInputState();
 
     SoundEngine.playTurnStart();
     renderScoreboard(state.gameRoom ? state.gameRoom.players : [], { id: data.drawerId, name: data.drawerName });
@@ -928,13 +1005,11 @@
       state.canvas.setInteractive(true);
     }
 
-    els.drawingToolbar.style.display = 'flex';
+    updateToolbarsState();
     els.wordDisplay.textContent = `کلمه شما برای نقاشی: ${data.wordObj.word} ✏️`;
     els.wordCategoryBadge.textContent = `دسته‌بندی: ${data.wordObj.category}`;
     els.wordCategoryBadge.style.display = 'inline-block';
-    els.chatInput.disabled = true;
-    els.chatInput.placeholder = 'شما در حال نقاشی هستید 🎨';
-    els.chatSendBtn.disabled = true;
+    updateInputState();
   }
 
   function handleTick(seconds, masked) {
@@ -1051,51 +1126,115 @@
 
   // --- Scoreboard & Chat Rendering ---
   function renderScoreboard(players, drawer) {
-    if (!els.scoreboardList) return;
-    els.scoreboardList.innerHTML = '';
-
     const sorted = [...(players || [])].sort((a, b) => b.score - a.score);
 
-    sorted.forEach((p, idx) => {
-      const isDrawer = drawer && drawer.id === p.id;
-      const isMe = p.id === state.myPlayerId;
-      const item = document.createElement('div');
-      item.className = 'score-item' + (isMe ? ' is-me' : '') + (p.guessedThisRound ? ' guessed' : '');
+    // 1. Desktop / Full Sidebar Scoreboard
+    if (els.scoreboardList) {
+      els.scoreboardList.innerHTML = '';
+      sorted.forEach((p, idx) => {
+        const isDrawer = drawer && drawer.id === p.id;
+        const isMe = p.id === state.myPlayerId;
+        const item = document.createElement('div');
+        item.className = 'score-item' + (isMe ? ' is-me' : '') + (p.guessedThisRound ? ' guessed' : '');
 
-      item.innerHTML = `
-        <div class="score-rank">#${idx + 1}</div>
-        <div class="score-avatar">${p.avatar}</div>
-        <div class="score-details">
-          <div class="score-name">${p.name} ${isDrawer ? '✏️' : (p.guessedThisRound ? '✅' : '')}</div>
-          <div class="score-pts">${p.score} امتیاز</div>
-        </div>
-      `;
-      els.scoreboardList.appendChild(item);
-    });
+        item.innerHTML = `
+          <div class="score-rank">#${idx + 1}</div>
+          <div class="score-avatar">${p.avatar}</div>
+          <div class="score-details">
+            <div class="score-name">${p.name} ${isDrawer ? '✏️' : (p.guessedThisRound ? '✅' : '')}</div>
+            <div class="score-pts">${p.score} امتیاز</div>
+          </div>
+        `;
+        els.scoreboardList.appendChild(item);
+
+        if (isMe && els.mobileMyRank) {
+          els.mobileMyRank.textContent = `#${idx + 1}`;
+        }
+      });
+    }
+
+    // 2. Mobile Mini Player Ribbon
+    if (els.mobilePlayerRibbon) {
+      els.mobilePlayerRibbon.innerHTML = '';
+      (players || []).forEach(p => {
+        const isDrawer = drawer && drawer.id === p.id;
+        const isMe = p.id === state.myPlayerId;
+        const chip = document.createElement('div');
+        chip.className = 'ribbon-chip' + (isMe ? ' is-me' : '') + (isDrawer ? ' is-drawer' : '') + (p.guessedThisRound ? ' guessed' : '');
+        chip.innerHTML = `
+          <span class="ribbon-avatar">${p.avatar}</span>
+          <span class="ribbon-name">${p.name}</span>
+          <span class="ribbon-score">${p.score}</span>
+          ${isDrawer ? '<span>✏️</span>' : (p.guessedThisRound ? '<span>✅</span>' : '')}
+        `;
+        els.mobilePlayerRibbon.appendChild(chip);
+      });
+    }
   }
 
   function renderChatMessage(msg) {
-    if (!els.chatMessages) return;
+    // 1. Append to Full Chat Stream
+    if (els.chatMessages) {
+      const div = document.createElement('div');
+      div.className = 'chat-message' + (msg.isSystem ? ' system-msg' : '') + (msg.isCorrect ? ' correct-msg' : '');
 
-    const div = document.createElement('div');
-    div.className = 'chat-message' + (msg.isSystem ? ' system-msg' : '') + (msg.isCorrect ? ' correct-msg' : '');
+      if (msg.isSystem) {
+        div.innerHTML = `<span class="msg-icon">${msg.avatar || '📢'}</span> <span class="msg-text">${msg.text}</span>`;
+      } else {
+        div.innerHTML = `<span class="msg-sender">${msg.avatar || ''} ${msg.sender}:</span> <span class="msg-text">${msg.text}</span>`;
+        SoundEngine.playChatPop();
+      }
 
-    if (msg.isSystem) {
-      div.innerHTML = `<span class="msg-icon">${msg.avatar || '📢'}</span> <span class="msg-text">${msg.text}</span>`;
-    } else {
-      div.innerHTML = `<span class="msg-sender">${msg.avatar || ''} ${msg.sender}:</span> <span class="msg-text">${msg.text}</span>`;
-      SoundEngine.playChatPop();
+      els.chatMessages.appendChild(div);
+      els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
     }
 
-    els.chatMessages.appendChild(div);
-    els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
+    // 2. Floating Live Ticker above Guesser Input
+    if (els.recentChatTicker) {
+      const tickerItem = document.createElement('div');
+      tickerItem.className = 'ticker-item' + (msg.isCorrect ? ' correct' : '');
+      if (msg.isSystem) {
+        tickerItem.innerHTML = `<span>${msg.avatar || '📢'}</span> <span>${msg.text}</span>`;
+      } else {
+        tickerItem.innerHTML = `<strong>${msg.avatar || ''} ${msg.sender}:</strong> <span>${msg.text}</span>`;
+      }
+      els.recentChatTicker.appendChild(tickerItem);
+
+      // Keep max 2 items in ticker
+      while (els.recentChatTicker.children.length > 2) {
+        els.recentChatTicker.removeChild(els.recentChatTicker.firstChild);
+      }
+
+      setTimeout(() => {
+        if (tickerItem.parentNode) {
+          tickerItem.style.opacity = '0';
+          tickerItem.style.transform = 'translateY(-6px)';
+          tickerItem.style.transition = 'all 0.3s ease';
+          setTimeout(() => {
+            if (tickerItem.parentNode) {
+              tickerItem.parentNode.removeChild(tickerItem);
+            }
+          }, 300);
+        }
+      }, 4000);
+    }
+
+    // 3. Unread badge for mobile chat button if chat sheet is closed
+    if (els.sidebarChat && !els.sidebarChat.classList.contains('open')) {
+      state.unreadChatCount = (state.unreadChatCount || 0) + 1;
+      if (els.chatUnreadBadge) {
+        els.chatUnreadBadge.textContent = state.unreadChatCount > 9 ? '+۹' : state.unreadChatCount;
+        els.chatUnreadBadge.style.display = 'inline-block';
+      }
+    }
   }
 
-  function submitGuess() {
-    const text = els.chatInput.value.trim();
+  function submitGuess(rawText) {
+    const text = (rawText !== undefined ? rawText : (els.chatInput ? els.chatInput.value : '')).trim();
     if (!text) return;
 
-    els.chatInput.value = '';
+    if (els.chatInput) els.chatInput.value = '';
+    if (els.quickGuessInput) els.quickGuessInput.value = '';
 
     if (state.isDrawer) return;
 
@@ -1103,6 +1242,7 @@
       const res = state.gameRoom.submitGuess(state.myPlayerId, text);
       if (res.type === 'CORRECT') {
         SoundEngine.playCorrectGuess();
+        if (navigator.vibrate) navigator.vibrate([50, 40, 90]);
         const chatMsg = {
           sender: 'سیستم',
           avatar: '🎉',
@@ -1119,6 +1259,7 @@
         }
       } else if (res.type === 'CLOSE') {
         SoundEngine.playCloseGuess();
+        if (navigator.vibrate) navigator.vibrate([40]);
         renderChatMessage({
           sender: 'سیستم',
           avatar: '💡',
@@ -1197,7 +1338,8 @@
         els.paletteColors.forEach(c => c.classList.remove('active'));
         el.classList.add('active');
         const color = el.getAttribute('data-color');
-        state.canvas.setColor(color);
+        if (state.canvas) state.canvas.setColor(color);
+        if (navigator.vibrate) navigator.vibrate([12]);
       });
     });
 
@@ -1207,8 +1349,10 @@
         els.brushSizes.forEach(s => s.classList.remove('active'));
         el.classList.add('active');
         const sizeName = el.getAttribute('data-size');
-        const sizeMap = { thin: 3, medium: 7, thick: 14, jumbo: 26 };
-        state.canvas.setLineWidth(sizeMap[sizeName] || 7);
+        if (state.canvas) {
+          state.canvas.setSize(sizeName);
+        }
+        if (navigator.vibrate) navigator.vibrate([12]);
       });
     });
 
@@ -1219,7 +1363,8 @@
         if (!tool) return;
         els.toolButtons.forEach(b => b.classList.remove('active'));
         el.classList.add('active');
-        state.canvas.setTool(tool);
+        if (state.canvas) state.canvas.setTool(tool);
+        if (navigator.vibrate) navigator.vibrate([15]);
       });
     });
 
@@ -1227,6 +1372,7 @@
     els.btnClear.addEventListener('click', () => {
       if (state.isDrawer && state.canvas) {
         state.canvas.clear(true);
+        if (navigator.vibrate) navigator.vibrate([25]);
       }
     });
 
@@ -1234,6 +1380,7 @@
     els.btnUndo.addEventListener('click', () => {
       if (state.isDrawer && state.canvas) {
         state.canvas.undo(true);
+        if (navigator.vibrate) navigator.vibrate([15]);
       }
     });
   }
@@ -1258,6 +1405,10 @@
       if (state.roomCode) {
         navigator.clipboard.writeText(state.roomCode).then(() => {
           notify('کد اتاق در حافظه کپی شد! 📋', 'success');
+          if (navigator.vibrate) navigator.vibrate([20]);
+          const oldText = els.btnCopyCode.textContent;
+          els.btnCopyCode.textContent = 'کپی شد! ✅';
+          setTimeout(() => { els.btnCopyCode.textContent = oldText; }, 2000);
         }).catch(() => {
           notify(`کد اتاق: ${state.roomCode}`, 'info');
         });
@@ -1270,6 +1421,10 @@
         const link = `${base}?room=${state.roomCode}`;
         navigator.clipboard.writeText(link).then(() => {
           notify('لینک ورود به بازی کپی شد! 🔗 برای دوستانتان بفرستید.', 'success');
+          if (navigator.vibrate) navigator.vibrate([20]);
+          const oldText = els.btnCopyLink.textContent;
+          els.btnCopyLink.textContent = 'کپی شد! ✅';
+          setTimeout(() => { els.btnCopyLink.textContent = oldText; }, 2000);
         }).catch(() => {
           notify(link, 'info');
         });
@@ -1284,7 +1439,32 @@
       showView('lobby');
     });
 
-    // Game
+    // Game Mobile Drawers & Action Toggles
+    if (els.btnToggleScores) {
+      els.btnToggleScores.addEventListener('click', toggleScoreboardDrawer);
+    }
+    if (els.btnToggleChat) {
+      els.btnToggleChat.addEventListener('click', toggleChatDrawer);
+    }
+    if (els.btnCloseScores) {
+      els.btnCloseScores.addEventListener('click', closeAllDrawers);
+    }
+    if (els.btnCloseChat) {
+      els.btnCloseChat.addEventListener('click', closeAllDrawers);
+    }
+    if (els.drawerBackdrop) {
+      els.drawerBackdrop.addEventListener('click', closeAllDrawers);
+    }
+
+    // Quick Guess Form (Mobile / Tablet)
+    if (els.quickGuessForm) {
+      els.quickGuessForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        submitGuess(els.quickGuessInput ? els.quickGuessInput.value : '');
+      });
+    }
+
+    // Game Controls
     els.btnMute.addEventListener('click', () => {
       SoundEngine.toggleMute();
       updateMuteButton();
@@ -1292,6 +1472,7 @@
 
     els.btnLeaveGame.addEventListener('click', () => {
       if (confirm('آیا مطمئن هستید که می‌خواهید از بازی خارج شوید؟')) {
+        closeAllDrawers();
         if (state.network) state.network.destroy();
         showView('lobby');
       }
@@ -1304,6 +1485,7 @@
 
     // Game Over
     els.btnPlayAgain.addEventListener('click', () => {
+      closeAllDrawers();
       if (state.isHost && state.gameRoom) {
         state.gameRoom.restartGame();
         broadcastRoomState();
@@ -1315,15 +1497,24 @@
     });
 
     els.btnBackLobby.addEventListener('click', () => {
+      closeAllDrawers();
       if (state.network) state.network.destroy();
       showView('lobby');
     });
 
-    // Window resize
+    // Window resize & orientation change
     window.addEventListener('resize', () => {
       if (state.canvas && state.currentView === 'game') {
         state.canvas.setupCanvas();
       }
+    });
+
+    window.addEventListener('orientationchange', () => {
+      setTimeout(() => {
+        if (state.canvas && state.currentView === 'game') {
+          state.canvas.setupCanvas();
+        }
+      }, 200);
     });
 
     // PWA Install prompt

@@ -51,9 +51,11 @@ assert.strictEqual(room.timerSeconds, 60);
 console.log(`✓ Word "${chosenWord.word}" selected, timer set to 60s.`);
 
 // 7. Test Guess Submission
-// Guess by drawer should not score
+// Guess by drawer should not score (spoiler blocked for secret word)
 const drawerGuess = room.submitGuess('p1', chosenWord.word);
-assert.strictEqual(drawerGuess.type, 'CHAT');
+assert.strictEqual(drawerGuess.type, 'DRAWER_SPOILER_BLOCKED');
+const drawerChat = room.submitGuess('p1', 'سلام نقاشیم چطوره؟');
+assert.strictEqual(drawerChat.type, 'CHAT');
 
 // Wrong guess by p2
 const wrongGuess = room.submitGuess('p2', 'کلمه اشتباه');
@@ -69,7 +71,9 @@ console.log(`✓ Guess correctly scored: +${correctGuess.points} to guesser, +60
 
 // 8. Re-guessing by same player
 const reGuess = room.submitGuess('p2', chosenWord.word);
-assert.strictEqual(reGuess.type, 'ALREADY_GUESSED');
+assert.strictEqual(reGuess.type, 'ALREADY_GUESSED_SPOILER');
+const chatAfterGuess = room.submitGuess('p2', 'من حدس زدم!');
+assert.strictEqual(chatAfterGuess.type, 'ALREADY_GUESSED');
 
 // 9. All remaining players guess -> round ends immediately
 for (let i = 3; i <= 6; i++) {
