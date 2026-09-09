@@ -106,4 +106,13 @@ assert.ok(cssContent.includes('.tool-btn') && cssContent.includes('min-width: 44
 assert.ok(cssContent.includes('grid-template-columns: 1fr'), 'Word choices grid must stack vertically on mobile phones for large touchable cards');
 console.log('   ✓ Mobile smooth scrolling, expandable drawers & 44px touch targets verified.');
 
+// 12. Mobile Top Bar Word Preservation, Viewport-Escaped Modals & Keyboard Safety
+console.log('12. Verifying Mobile Top Bar Word Preservation, Viewport-Escaped Modals & Keyboard Safety...');
+assert.ok(cssContent.includes('.word-info-wrap') && cssContent.includes('order: 3'), 'game-top-bar must position word-info-wrap on its own full-width row on phones');
+assert.ok(cssContent.includes('.modal-overlay') && cssContent.includes('position: fixed !important'), 'modal-overlay must escape canvas-container on mobile via position: fixed');
+assert.ok(cssContent.includes('.canvas-container') && cssContent.includes('aspect-ratio: 3 / 2'), 'canvas-container must enforce 3:2 aspect-ratio on mobile so canvas does not shrink');
+assert.ok(cssContent.includes('.chat-form input') && cssContent.includes('1rem'), 'chat-form input must enforce 1rem font-size to prevent iOS Safari auto-zoom');
+assert.ok(appJsContent.includes("e.key === 'Escape'"), 'app.js must close drawers on Escape key');
+console.log('   ✓ Mobile top bar word preservation, modal escaping & keyboard safety verified.');
+
 console.log('\n🎉 ALL RESPONSIVE & MOBILE PWA TESTS PASSED FLAWLESSLY! 🎉\n');

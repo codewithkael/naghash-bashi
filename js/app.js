@@ -1948,17 +1948,27 @@
 
     // Visual Viewport API for dynamic virtual keyboard adaptation on mobile
     if (typeof window !== 'undefined' && window.visualViewport) {
+      let lastVh = 0;
       const handleVisualViewport = () => {
-        const vh = window.visualViewport.height;
-        document.documentElement.style.setProperty('--vvh', `${vh}px`);
-        if (state.canvas && state.currentView === 'game') {
-          state.canvas.setupCanvas();
+        const vh = Math.round(window.visualViewport.height);
+        if (Math.abs(vh - lastVh) > 5) {
+          lastVh = vh;
+          document.documentElement.style.setProperty('--vvh', `${vh}px`);
+          if (state.canvas && state.currentView === 'game') {
+            state.canvas.setupCanvas();
+          }
         }
       };
       window.visualViewport.addEventListener('resize', handleVisualViewport);
-      window.visualViewport.addEventListener('scroll', handleVisualViewport);
       handleVisualViewport();
     }
+
+    // Keyboard navigation: Escape closes drawers
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        closeAllDrawers();
+      }
+    });
 
     // PWA Install prompt
     window.addEventListener('beforeinstallprompt', (e) => {
