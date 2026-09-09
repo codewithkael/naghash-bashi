@@ -1,5 +1,5 @@
 /**
- * نقاشباشی (Naghash Bashi) - Main Application Controller
+ * نقاش‌باشی (Naghash Bashi) - Main Application Controller
  * Coordinates UI views, Canvas interactions, Web Audio sound effects,
  * P2P WebRTC networking, Game Room state transitions, and Bot companions.
  */
@@ -106,6 +106,9 @@
   }
 
   function showView(viewName) {
+    if (state.currentView === viewName && els[`screen${capitalize(viewName)}`]?.classList.contains('active')) {
+      return;
+    }
     state.currentView = viewName;
     els.screenLobby.classList.toggle('active', viewName === 'lobby');
     els.screenWaiting.classList.toggle('active', viewName === 'waiting');
@@ -115,8 +118,14 @@
     if (viewName === 'game' && state.canvas) {
       setTimeout(() => {
         state.canvas.setupCanvas();
-      }, 50);
+      }, 60);
     }
+  }
+
+  function capitalize(s) {
+    if (!s) return '';
+    if (s === 'gameover') return 'GameOver';
+    return s.charAt(0).toUpperCase() + s.slice(1);
   }
 
   // --- Profile & Avatars ---
@@ -139,12 +148,12 @@
 
     renderAvatarPicker();
 
-    // Check URL query param: ?room=NB-123
+    // Check URL query param: ?room=NB-1234
     const urlParams = new URLSearchParams(window.location.search);
     const roomFromUrl = urlParams.get('room');
     if (roomFromUrl) {
       els.roomCodeInput.value = roomFromUrl.toUpperCase();
-      notify('کد اتاق از لینک دریافت شد! دکمه ورود به بازی را لمس کنید.', 'info');
+      notify('کد اتاق از لینک دریافت شد! نام خود را انتخاب کرده و دکمه ورود به اتاق را لمس کنید.', 'info');
     }
   }
 
@@ -205,9 +214,13 @@
       onConnected: (peerId) => {
         console.log('Network connected:', peerId);
       },
+      onConnecting: (status) => {
+        notify(status.message, 'info');
+      },
       onPlayerJoined: (player) => {
         SoundEngine.playTurnStart();
         notify(`👋 ${player.name} به اتاق پیوست!`, 'info');
+        updateWaitingRoomUI();
       },
       onPlayerLeft: (playerId) => {
         handlePlayerLeft(playerId);
@@ -217,6 +230,11 @@
       },
       onRoomState: (roomState) => {
         handleSyncRoomState(roomState);
+      },
+      onGameStarted: (data) => {
+        showView('game');
+        SoundEngine.playTurnStart();
+        notify('🎮 مسابقه آغاز شد!', 'info');
       },
       onDrawAction: (action) => {
         if (!state.isDrawer && state.canvas) {
@@ -246,7 +264,16 @@
         handleGameOver(data);
       },
       onError: (err) => {
-        notify(err, 'error');
+        if (state.isHost && typeof err === 'string' && err.includes('مشغول است')) {
+          state.roomCode = NetworkEngine.NetworkManager.generateRoomCode();
+          if (state.gameRoom) state.gameRoom.roomCode = state.roomCode;
+          els.displayRoomCode.textContent = state.roomCode;
+          notify(`شناسه قبلی مشغول بود. کد جدید اتاق: ${state.roomCode}`, 'info');
+          const hostPlayer = { id: state.myPlayerId, name: state.myName, avatar: state.myAvatar, isHost: true };
+          state.network.initHost(state.roomCode, hostPlayer);
+        } else {
+          notify(err, 'error');
+        }
       },
       onHostReceivedPacket: ({ fromPeerId, packet }) => {
         handleHostPacket(fromPeerId, packet);
@@ -274,14 +301,22 @@
           return;
         }
 
-        // Broadcast full state
+        // Send direct state to joining peer
+        state.network.sendToPeer(fromPeerId, {
+          type: 'ROOM_STATE',
+          state: state.gameRoom.getStateSnapshot()
+        });
+
+        // Broadcast full state to all peers
         broadcastRoomState();
+        updateWaitingRoomUI();
         SoundEngine.playTurnStart();
         notify(`👋 ${packet.player.name} وارد اتاق شد!`, 'info');
         break;
       }
       case 'LEAVE': {
         handlePlayerLeft(packet.playerId || packet.senderId);
+        updateWaitingRoomUI();
         break;
       }
       case 'DRAW_ACTION': {
@@ -473,7 +508,7 @@
     els.displayRoomCode.textContent = cleanCode;
     els.hostControls.style.display = 'none';
     showView('waiting');
-    notify('در حال اتصال به اتاق...', 'info');
+    notify('در حال جستجو و اتصال به اتاق...', 'info');
   }
 
   function startPracticeWithBots() {
@@ -509,6 +544,7 @@
     });
 
     broadcastRoomState();
+    updateWaitingRoomUI();
     SoundEngine.playTurnStart();
     notify(`🤖 ${bot.name} به اتاق افزوده شد!`, 'info');
   }
@@ -553,6 +589,14 @@
   function handleSyncRoomState(roomState) {
     if (!roomState) return;
 
+    // View auto-transition based on authoritative room state:
+    const inActiveGame = (roomState.status === 'CHOOSING' || roomState.status === 'DRAWING' || roomState.status === 'ROUND_END');
+    if (inActiveGame && state.currentView !== 'game') {
+      showView('game');
+    } else if (roomState.status === 'LOBBY' && state.currentView !== 'waiting' && state.currentView !== 'lobby') {
+      showView('waiting');
+    }
+
     if (state.currentView === 'waiting') {
       els.waitingCount.textContent = `${roomState.players.length} از ۶ نفر`;
       els.waitingPlayerSlots.innerHTML = '';
@@ -575,11 +619,29 @@
         }
         els.waitingPlayerSlots.appendChild(slot);
       }
+
+      // CRITICAL: Update Host Start Button in real-time when guests join
+      if (state.isHost) {
+        const canStart = roomState.players.length >= RoomLogic.MIN_PLAYERS;
+        els.btnStartGame.disabled = !canStart;
+        els.btnStartGame.title = canStart ? 'شروع بازی' : 'حداقل ۲ بازیکن نیاز است';
+        els.btnAddBot.disabled = roomState.players.length >= RoomLogic.MAX_PLAYERS;
+      }
     }
 
     if (state.currentView === 'game') {
       renderScoreboard(roomState.players, roomState.drawer);
       els.roundIndicator.textContent = `دور ${roomState.currentRound} از ${roomState.totalRounds}`;
+
+      if (roomState.status === 'CHOOSING') {
+        const drawerId = roomState.drawer ? roomState.drawer.id : null;
+        if (drawerId !== state.myPlayerId) {
+          els.overlayWaitingChoice.classList.add('active');
+          const drawerName = roomState.drawer ? roomState.drawer.name : 'نقاش';
+          const titleEl = els.overlayWaitingChoice.querySelector('h3');
+          if (titleEl) titleEl.textContent = `${drawerName} در حال انتخاب کلمه است...`;
+        }
+      }
 
       if (!state.isDrawer && roomState.maskedWord) {
         els.wordDisplay.textContent = roomState.maskedWord;
@@ -602,6 +664,7 @@
     }
 
     showView('game');
+    state.network.broadcast({ type: 'GAME_STARTED' });
     startWordSelectionPhaseHost();
   }
 
@@ -613,6 +676,14 @@
     const drawer = data.drawer;
     state.isDrawer = (drawer.id === state.myPlayerId);
 
+    // Broadcast GAME_STARTED and full ROOM_STATE so all players transition to game screen
+    state.network.broadcast({
+      type: 'GAME_STARTED',
+      drawerId: drawer.id,
+      drawerName: drawer.name,
+      round: state.gameRoom.currentRound,
+      totalRounds: state.gameRoom.totalRounds
+    });
     broadcastRoomState();
 
     if (state.canvas) {
@@ -635,6 +706,9 @@
       showWordChoiceModal(data.wordChoices);
     } else {
       els.overlayWaitingChoice.classList.add('active');
+      const titleEl = els.overlayWaitingChoice.querySelector('h3');
+      if (titleEl) titleEl.textContent = `${drawer.name} در حال انتخاب کلمه است...`;
+
       state.network.sendToPeer(drawer.id, {
         type: 'WORD_CHOICES',
         choices: data.wordChoices
@@ -656,6 +730,7 @@
   }
 
   function showWordChoiceModal(choices) {
+    showView('game');
     els.overlayWaitingChoice.classList.remove('active');
     els.overlayWordChoice.classList.add('active');
     if (els.wordChoiceTimer) {
@@ -679,6 +754,21 @@
 
       card.addEventListener('click', () => {
         els.overlayWordChoice.classList.remove('active');
+        state.currentWord = c;
+        state.isDrawer = true;
+
+        if (state.canvas) {
+          state.canvas.clear(false);
+          state.canvas.setInteractive(true);
+        }
+        els.drawingToolbar.style.display = 'flex';
+        els.wordDisplay.textContent = `کلمه شما برای نقاشی: ${c.word} ✏️`;
+        els.wordCategoryBadge.textContent = `دسته‌بندی: ${c.category}`;
+        els.wordCategoryBadge.style.display = 'inline-block';
+        els.chatInput.disabled = true;
+        els.chatInput.placeholder = 'شما در حال نقاشی هستید 🎨';
+        els.chatSendBtn.disabled = true;
+
         if (state.isHost) {
           const result = state.gameRoom.selectWord(c);
           startDrawingPhaseHost(result);
@@ -785,6 +875,7 @@
   }
 
   function handleRoundStart(data) {
+    showView('game');
     els.overlayWordChoice.classList.remove('active');
     els.overlayWaitingChoice.classList.remove('active');
     els.overlayRoundEnd.classList.remove('active');
@@ -801,6 +892,8 @@
     if (state.isDrawer) {
       if (data.wordObj) {
         state.currentWord = data.wordObj;
+      }
+      if (state.currentWord) {
         els.wordDisplay.textContent = `کلمه شما برای نقاشی: ${state.currentWord.word} ✏️`;
         els.wordCategoryBadge.textContent = `دسته‌بندی: ${state.currentWord.category}`;
         els.wordCategoryBadge.style.display = 'inline-block';
@@ -823,6 +916,7 @@
   }
 
   function handleDrawerSecretWord(data) {
+    showView('game');
     state.isDrawer = true;
     state.currentWord = data.wordObj;
 
@@ -1098,42 +1192,45 @@
     });
 
     // Color palette selection
-    els.paletteColors.forEach((swatch) => {
-      swatch.addEventListener('click', () => {
-        els.paletteColors.forEach(s => s.classList.remove('active'));
-        swatch.classList.add('active');
-        const color = swatch.dataset.color;
+    els.paletteColors.forEach((el) => {
+      el.addEventListener('click', () => {
+        els.paletteColors.forEach(c => c.classList.remove('active'));
+        el.classList.add('active');
+        const color = el.getAttribute('data-color');
         state.canvas.setColor(color);
       });
     });
 
-    // Brush size selection
-    els.brushSizes.forEach((btn) => {
-      btn.addEventListener('click', () => {
-        els.brushSizes.forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        state.canvas.setSize(btn.dataset.size);
+    // Brush sizes
+    els.brushSizes.forEach((el) => {
+      el.addEventListener('click', () => {
+        els.brushSizes.forEach(s => s.classList.remove('active'));
+        el.classList.add('active');
+        const sizeName = el.getAttribute('data-size');
+        const sizeMap = { thin: 3, medium: 7, thick: 14, jumbo: 26 };
+        state.canvas.setLineWidth(sizeMap[sizeName] || 7);
       });
     });
 
-    // Tool buttons (pencil, eraser, bucket)
-    els.toolButtons.forEach((btn) => {
-      btn.addEventListener('click', () => {
+    // Tool selection (pencil, eraser, bucket)
+    els.toolButtons.forEach((el) => {
+      el.addEventListener('click', () => {
+        const tool = el.getAttribute('data-tool');
+        if (!tool) return;
         els.toolButtons.forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        state.canvas.setTool(btn.dataset.tool);
+        el.classList.add('active');
+        state.canvas.setTool(tool);
       });
     });
 
-    // Clear Canvas
+    // Clear canvas
     els.btnClear.addEventListener('click', () => {
       if (state.isDrawer && state.canvas) {
         state.canvas.clear(true);
-        SoundEngine.playClearCanvas();
       }
     });
 
-    // Undo Canvas
+    // Undo last stroke
     els.btnUndo.addEventListener('click', () => {
       if (state.isDrawer && state.canvas) {
         state.canvas.undo(true);
@@ -1148,25 +1245,33 @@
     els.btnJoinRoom.addEventListener('click', () => joinRoom());
     els.btnPracticeBots.addEventListener('click', startPracticeWithBots);
 
-    els.playerNameInput.addEventListener('input', validatePlayerName);
-    els.roomCodeInput.addEventListener('input', (e) => {
-      e.target.value = e.target.value.toUpperCase();
+    els.playerNameInput.addEventListener('input', () => {
+      els.nameError.style.display = 'none';
     });
 
-    // Waiting Room
+    els.roomCodeInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') joinRoom();
+    });
+
+    // Waiting Room Actions
     els.btnCopyCode.addEventListener('click', () => {
-      if (state.roomCode && navigator.clipboard) {
+      if (state.roomCode) {
         navigator.clipboard.writeText(state.roomCode).then(() => {
-          notify('کد اتاق کپی شد!', 'success');
+          notify('کد اتاق در حافظه کپی شد! 📋', 'success');
+        }).catch(() => {
+          notify(`کد اتاق: ${state.roomCode}`, 'info');
         });
       }
     });
 
     els.btnCopyLink.addEventListener('click', () => {
-      if (state.roomCode && navigator.clipboard) {
-        const link = `${window.location.origin}${window.location.pathname}?room=${state.roomCode}`;
+      if (state.roomCode) {
+        const base = window.location.origin + window.location.pathname;
+        const link = `${base}?room=${state.roomCode}`;
         navigator.clipboard.writeText(link).then(() => {
-          notify('لینک دعوت اتاق کپی شد!', 'success');
+          notify('لینک ورود به بازی کپی شد! 🔗 برای دوستانتان بفرستید.', 'success');
+        }).catch(() => {
+          notify(link, 'info');
         });
       }
     });
@@ -1254,7 +1359,7 @@
       });
     }
 
-    console.log('نقاشباشی با موفقیت راه‌اندازی شد! 🎨');
+    console.log('نقاش‌باشی با موفقیت راه‌اندازی شد! 🎨');
   }
 
   document.addEventListener('DOMContentLoaded', init);

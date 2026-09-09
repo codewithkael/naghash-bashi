@@ -1,5 +1,5 @@
 /**
- * نقاشباشی (Naghash Bashi) - P2P Multiplayer Networking Engine
+ * نقاش‌باشی (Naghash Bashi) - P2P Multiplayer Networking Engine
  * Uses PeerJS (WebRTC) for serverless cross-device play on GitHub Pages,
  * local WebSocket relay when running via server.js,
  * and BroadcastChannel fallback for multi-tab offline testing.
@@ -15,6 +15,31 @@
 
   const PEER_PREFIX = 'naghash-room-';
 
+  // Comprehensive STUN and TURN server list to ensure connectivity across Iranian ISPs & mobile data NATs
+  const RTC_CONFIG = {
+    iceServers: [
+      { urls: 'stun:turn1.spacsvc.co.in:3478' },
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:stun.cloudflare.com:3478' },
+      {
+        urls: 'turn:turn1.spacsvc.co.in:3478?transport=udp',
+        username: 'username1',
+        credential: 'password1'
+      },
+      {
+        urls: 'turn:turn1.spacsvc.co.in:3478?transport=tcp',
+        username: 'username1',
+        credential: 'password1'
+      },
+      {
+        urls: 'turns:turn1.spacsvc.co.in:443?transport=tcp',
+        username: 'username1',
+        credential: 'password1'
+      }
+    ]
+  };
+
   function formatRoomPeerId(code) {
     const clean = (code || '').toLowerCase().replace(/[^a-z0-9]/g, '');
     return `${PEER_PREFIX}${clean}`;
@@ -25,10 +50,12 @@
       this.callbacks = callbacks;
       // callbacks:
       // onConnected(peerId)
+      // onConnecting(status)
       // onPlayerJoined(player)
       // onPlayerLeft(playerId)
       // onPlayerDisconnected(playerId)
       // onRoomState(state)
+      // onGameStarted(data)
       // onDrawAction(action)
       // onChatMessage(msg)
       // onWordChoices(choices)
@@ -44,17 +71,23 @@
       this.roomCode = null;
       this.myPlayerId = null;
       this.peer = null;
-      this.connections = new Map();     // peerId -> DataConnection
-      this.peerToPlayerId = new Map();  // peerId -> playerId
-      this.playerIdToPeer = new Map();  // playerId -> peerId
-      this.hostConn = null;             // For guest: DataConnection to host
-      this.broadcastChannel = null;     // Local BroadcastChannel
-      this.ws = null;                   // Local WebSocket connection if server.js is active
+      this.connections = new Map();         // peerId -> DataConnection
+      this.peerToPlayerId = new Map();      // peerId -> playerId
+      this.playerIdToPeer = new Map();      // playerId -> peerId
+      this.disconnectTimers = new Map();    // playerId -> setTimeout ID
+      this.hostConn = null;                 // For guest: DataConnection to host
+      this.broadcastChannel = null;         // Local BroadcastChannel
+      this.ws = null;                       // Local WebSocket connection if server.js is active
       this.isDestroyed = false;
+      this.joinHandshakeInterval = null;
+      this.keepaliveInterval = null;
+      this.reconnectAttempts = 0;
+      this.maxReconnectAttempts = 5;
     }
 
     static generateRoomCode() {
-      const num = Math.floor(100 + Math.random() * 900);
+      // 4-digit random room number e.g. NB-4821 (10,000 possibilities)
+      const num = Math.floor(1000 + Math.random() * 9000);
       return `NB-${num}`;
     }
 
@@ -77,6 +110,7 @@
       const targetId = formatRoomPeerId(roomCode);
       this.setupBroadcastChannel(roomCode);
       this.setupWebSocket(roomCode);
+      this.setupKeepalive();
 
       return new Promise((resolve) => {
         if (typeof Peer === 'undefined') {
@@ -88,12 +122,7 @@
         try {
           this.peer = new Peer(targetId, {
             debug: 1,
-            config: {
-              iceServers: [
-                { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:stun1.l.google.com:19302' }
-              ]
-            }
+            config: RTC_CONFIG
           });
 
           this.peer.on('open', (id) => {
@@ -109,7 +138,9 @@
           this.peer.on('error', (err) => {
             console.warn('PeerJS Host Error:', err);
             if (err.type === 'unavailable-id') {
-              this.emit('onError', 'شناسه این اتاق در حال حاضر مشغول است. کد جدیدی انتخاب کنید.');
+              this.emit('onError', 'شناسه این اتاق در حال حاضر مشغول است. لطفاً چند لحظه بعد مجدداً تلاش کنید یا اتاق جدیدی بسازید.');
+            } else if (err.type === 'network' || err.type === 'server-error') {
+              this.emit('onError', 'خطای ارتباط با سرور سیگنالینگ. در حال بررسی...');
             }
             resolve('fallback-host');
           });
@@ -121,7 +152,7 @@
     }
 
     /**
-     * Join an existing room as guest
+     * Join an existing room as guest with automatic retry
      */
     initGuest(roomCode, guestPlayer) {
       this.isHost = false;
@@ -131,6 +162,7 @@
       const hostPeerId = formatRoomPeerId(roomCode);
       this.setupBroadcastChannel(roomCode);
       this.setupWebSocket(roomCode);
+      this.setupKeepalive();
 
       return new Promise((resolve) => {
         if (typeof Peer === 'undefined') {
@@ -139,56 +171,151 @@
           return resolve(true);
         }
 
-        try {
+        this.connectGuestToHost(hostPeerId, guestPlayer, resolve);
+      });
+    }
+
+    connectGuestToHost(hostPeerId, guestPlayer, resolvePromise) {
+      if (this.isDestroyed) return;
+
+      try {
+        if (!this.peer || this.peer.destroyed) {
           this.peer = new Peer({
             debug: 1,
-            config: {
-              iceServers: [
-                { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:stun1.l.google.com:19302' }
-              ]
-            }
+            config: RTC_CONFIG
           });
 
           this.peer.on('open', (myId) => {
             console.log('Guest peer opened with ID:', myId);
-            const conn = this.peer.connect(hostPeerId, { reliable: true });
-
-            conn.on('open', () => {
-              console.log('Connected to host peer:', hostPeerId);
-              this.hostConn = conn;
-              this.sendToHost({ type: 'JOIN', player: guestPlayer });
-              resolve(true);
-            });
-
-            conn.on('data', (data) => {
-              this.handlePacket(data);
-            });
-
-            conn.on('close', () => {
-              console.log('Connection to host closed');
-              this.emit('onError', 'ارتباط با میزبان بازی قطع شد.');
-              this.emit('onPlayerLeft', 'host');
-            });
-
-            conn.on('error', (err) => {
-              console.warn('Guest conn error:', err);
-              this.sendLocalBroadcast({ type: 'JOIN', player: guestPlayer });
-              resolve(false);
-            });
+            this.attemptDataConnection(hostPeerId, guestPlayer, resolvePromise);
           });
 
           this.peer.on('error', (err) => {
-            console.warn('Guest Peer error:', err);
-            this.sendLocalBroadcast({ type: 'JOIN', player: guestPlayer });
-            resolve(false);
+            console.warn('Guest Peer error:', err.type, err);
+            if (err.type === 'peer-unavailable' && this.reconnectAttempts < this.maxReconnectAttempts) {
+              this.scheduleGuestRetry(hostPeerId, guestPlayer, resolvePromise);
+            } else {
+              this.sendLocalBroadcast({ type: 'JOIN', player: guestPlayer });
+              if (resolvePromise) resolvePromise(false);
+            }
           });
-        } catch (e) {
-          console.warn('Peer error, fallback to BC:', e);
-          this.sendLocalBroadcast({ type: 'JOIN', player: guestPlayer });
-          resolve(false);
+        } else if (this.peer.open) {
+          this.attemptDataConnection(hostPeerId, guestPlayer, resolvePromise);
+        } else {
+          this.peer.once('open', () => {
+            this.attemptDataConnection(hostPeerId, guestPlayer, resolvePromise);
+          });
         }
+      } catch (e) {
+        console.warn('Peer error, fallback to BC:', e);
+        this.sendLocalBroadcast({ type: 'JOIN', player: guestPlayer });
+        if (resolvePromise) resolvePromise(false);
+      }
+    }
+
+    attemptDataConnection(hostPeerId, guestPlayer, resolvePromise) {
+      if (this.isDestroyed) return;
+      this.reconnectAttempts++;
+
+      this.emit('onConnecting', {
+        attempt: this.reconnectAttempts,
+        max: this.maxReconnectAttempts,
+        message: `در حال اتصال به میزبان (تلاش ${this.reconnectAttempts} از ${this.maxReconnectAttempts})...`
       });
+
+      try {
+        const conn = this.peer.connect(hostPeerId, {
+          reliable: true
+        });
+
+        const connTimeout = setTimeout(() => {
+          if (!this.hostConn && this.reconnectAttempts < this.maxReconnectAttempts) {
+            console.log('Conn timeout, retrying...');
+            try { conn.close(); } catch (_) {}
+            this.scheduleGuestRetry(hostPeerId, guestPlayer, resolvePromise);
+          }
+        }, 4000);
+
+        conn.on('open', () => {
+          clearTimeout(connTimeout);
+          console.log('Connected to host peer:', hostPeerId);
+          this.hostConn = conn;
+          this.reconnectAttempts = 0;
+
+          // Send JOIN packet
+          this.sendToHost({ type: 'JOIN', player: guestPlayer });
+
+          // Start handshake ack watchdog: if no room state received in 2.5s, re-send JOIN
+          if (this.joinHandshakeInterval) clearInterval(this.joinHandshakeInterval);
+          this.joinHandshakeInterval = setInterval(() => {
+            if (this.hostConn && this.hostConn.open) {
+              this.sendToHost({ type: 'JOIN', player: guestPlayer });
+            }
+          }, 2500);
+
+          if (resolvePromise) resolvePromise(true);
+        });
+
+        conn.on('data', (data) => {
+          if (this.joinHandshakeInterval) {
+            clearInterval(this.joinHandshakeInterval);
+            this.joinHandshakeInterval = null;
+          }
+          this.handlePacket(data);
+        });
+
+        conn.on('close', () => {
+          clearTimeout(connTimeout);
+          console.log('Connection to host closed');
+          // If not explicitly destroyed, attempt re-connecting before giving up
+          if (!this.isDestroyed && this.reconnectAttempts < this.maxReconnectAttempts) {
+            this.hostConn = null;
+            this.scheduleGuestRetry(hostPeerId, guestPlayer, null);
+          } else {
+            this.emit('onError', 'ارتباط با میزبان بازی قطع شد.');
+            this.emit('onPlayerLeft', 'host');
+          }
+        });
+
+        conn.on('error', (err) => {
+          clearTimeout(connTimeout);
+          console.warn('Guest conn error:', err);
+          if (this.reconnectAttempts < this.maxReconnectAttempts) {
+            this.scheduleGuestRetry(hostPeerId, guestPlayer, resolvePromise);
+          } else {
+            this.sendLocalBroadcast({ type: 'JOIN', player: guestPlayer });
+            if (resolvePromise) resolvePromise(false);
+          }
+        });
+      } catch (e) {
+        console.warn('attemptDataConnection exception:', e);
+        if (this.reconnectAttempts < this.maxReconnectAttempts) {
+          this.scheduleGuestRetry(hostPeerId, guestPlayer, resolvePromise);
+        }
+      }
+    }
+
+    scheduleGuestRetry(hostPeerId, guestPlayer, resolvePromise) {
+      if (this.isDestroyed) return;
+      setTimeout(() => {
+        if (!this.isDestroyed && (!this.hostConn || !this.hostConn.open)) {
+          this.attemptDataConnection(hostPeerId, guestPlayer, resolvePromise);
+        }
+      }, 1200);
+    }
+
+    setupKeepalive() {
+      if (this.keepaliveInterval) clearInterval(this.keepaliveInterval);
+      this.keepaliveInterval = setInterval(() => {
+        if (this.isDestroyed) return;
+        try {
+          if (this.isHost) {
+            this.broadcast({ type: 'PING' });
+          } else if (this.hostConn && this.hostConn.open) {
+            this.sendToHost({ type: 'PING' });
+          }
+        } catch (_) {}
+      }, 8000);
     }
 
     /**
@@ -237,19 +364,14 @@
               }
             } else if (data.action === 'PLAYER_DISCONNECTED') {
               if (this.isHost && data.playerId) {
-                this.emit('onPlayerDisconnected', data.playerId);
+                this.handlePeerDisconnection(data.playerId);
               }
             }
           } catch (e) {}
         };
 
-        ws.onclose = () => {
-          this.ws = null;
-        };
-
-        ws.onerror = () => {
-          this.ws = null;
-        };
+        ws.onclose = () => { this.ws = null; };
+        ws.onerror = () => { this.ws = null; };
       } catch (e) {
         this.ws = null;
       }
@@ -297,6 +419,9 @@
     handleIncomingConnection(conn) {
       const peerId = conn.peer;
 
+      // Immediately register connection in map so replies can be routed right away
+      this.connections.set(peerId, conn);
+
       conn.on('open', () => {
         console.log('Host accepted peer connection from:', peerId);
         this.connections.set(peerId, conn);
@@ -307,14 +432,10 @@
       });
 
       conn.on('close', () => {
-        console.log('Peer disconnected:', peerId);
+        console.log('Peer connection closed:', peerId);
         const playerId = this.peerToPlayerId.get(peerId);
         this.connections.delete(peerId);
-        if (playerId) {
-          this.playerIdToPeer.delete(playerId);
-          this.peerToPlayerId.delete(peerId);
-        }
-        this.emit('onPlayerDisconnected', playerId || peerId);
+        this.handlePeerDisconnection(playerId || peerId);
       });
 
       conn.on('error', (err) => {
@@ -322,19 +443,62 @@
       });
     }
 
+    handlePeerDisconnection(playerId) {
+      if (!playerId || !this.isHost) return;
+
+      // Cancel any existing timer for this player
+      if (this.disconnectTimers.has(playerId)) {
+        clearTimeout(this.disconnectTimers.get(playerId));
+      }
+
+      // 7-second grace reconnection period to prevent instant kicks on cellular network blips
+      const timer = setTimeout(() => {
+        this.disconnectTimers.delete(playerId);
+        const peerId = this.playerIdToPeer.get(playerId);
+        if (peerId) {
+          this.connections.delete(peerId);
+          this.peerToPlayerId.delete(peerId);
+        }
+        this.playerIdToPeer.delete(playerId);
+        this.emit('onPlayerDisconnected', playerId);
+      }, 7000);
+
+      this.disconnectTimers.set(playerId, timer);
+    }
+
     /**
      * Host receives message from a guest
      */
     handleGuestMessage(fromPeerId, packet) {
-      if (packet) {
-        if (packet.senderId) this.registerPlayerPeer(packet.senderId, fromPeerId);
-        if (packet.player && packet.player.id) this.registerPlayerPeer(packet.player.id, fromPeerId);
-        if (packet.type === 'LEAVE') {
-          const pId = packet.playerId || packet.senderId;
-          this.emit('onPlayerDisconnected', pId);
-          return;
-        }
+      if (!packet) return;
+
+      if (packet.type === 'PING') {
+        this.sendToPeer(fromPeerId, { type: 'PONG' });
+        return;
       }
+      if (packet.type === 'PONG') return;
+
+      const pId = packet.playerId || (packet.player && packet.player.id) || packet.senderId;
+
+      // If reconnecting player had a disconnect grace timer, cancel it
+      if (pId && this.disconnectTimers.has(pId)) {
+        clearTimeout(this.disconnectTimers.get(pId));
+        this.disconnectTimers.delete(pId);
+      }
+
+      if (packet.senderId) this.registerPlayerPeer(packet.senderId, fromPeerId);
+      if (packet.player && packet.player.id) this.registerPlayerPeer(packet.player.id, fromPeerId);
+
+      // Explicit LEAVE requested by user
+      if (packet.type === 'LEAVE') {
+        if (pId && this.disconnectTimers.has(pId)) {
+          clearTimeout(this.disconnectTimers.get(pId));
+          this.disconnectTimers.delete(pId);
+        }
+        this.emit('onPlayerDisconnected', pId);
+        return;
+      }
+
       this.emit('onHostReceivedPacket', { fromPeerId, packet });
     }
 
@@ -344,6 +508,14 @@
     handlePacket(packet) {
       if (!packet) return;
 
+      if (packet.type === 'PING') {
+        if (this.hostConn && this.hostConn.open) {
+          this.sendToHost({ type: 'PONG' });
+        }
+        return;
+      }
+      if (packet.type === 'PONG') return;
+
       // If targeted to someone else, ignore
       if (packet.targetPlayerId && packet.targetPlayerId !== this.myPlayerId) {
         return;
@@ -352,6 +524,9 @@
       switch (packet.type) {
         case 'ROOM_STATE':
           this.emit('onRoomState', packet.state);
+          break;
+        case 'GAME_STARTED':
+          this.emit('onGameStarted', packet);
           break;
         case 'DRAW_ACTION':
           this.emit('onDrawAction', packet.action);
@@ -466,6 +641,17 @@
     destroy() {
       this.isDestroyed = true;
 
+      if (this.joinHandshakeInterval) {
+        clearInterval(this.joinHandshakeInterval);
+        this.joinHandshakeInterval = null;
+      }
+      if (this.keepaliveInterval) {
+        clearInterval(this.keepaliveInterval);
+        this.keepaliveInterval = null;
+      }
+      this.disconnectTimers.forEach(t => clearTimeout(t));
+      this.disconnectTimers.clear();
+
       // Send explicit leave signal before closing
       try {
         const leavePacket = { type: 'LEAVE', playerId: this.myPlayerId };
@@ -477,38 +663,29 @@
       } catch (e) {}
 
       if (this.ws) {
-        try {
-          this.ws.close();
-        } catch (e) {}
+        try { this.ws.close(); } catch (e) {}
         this.ws = null;
       }
 
       if (this.broadcastChannel) {
-        try {
-          this.broadcastChannel.close();
-        } catch (e) {}
+        try { this.broadcastChannel.close(); } catch (e) {}
         this.broadcastChannel = null;
       }
 
       if (this.hostConn) {
-        try {
-          this.hostConn.close();
-        } catch (e) {}
+        try { this.hostConn.close(); } catch (e) {}
+        this.hostConn = null;
       }
 
       this.connections.forEach((conn) => {
-        try {
-          conn.close();
-        } catch (e) {}
+        try { conn.close(); } catch (e) {}
       });
       this.connections.clear();
       this.peerToPlayerId.clear();
       this.playerIdToPeer.clear();
 
       if (this.peer) {
-        try {
-          this.peer.destroy();
-        } catch (e) {}
+        try { this.peer.destroy(); } catch (e) {}
         this.peer = null;
       }
     }
@@ -516,6 +693,7 @@
 
   return {
     PEER_PREFIX,
+    RTC_CONFIG,
     formatRoomPeerId,
     NetworkManager
   };
