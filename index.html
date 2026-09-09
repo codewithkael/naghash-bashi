@@ -180,18 +180,13 @@
 
     <!-- 3. MAIN GAME ARENA SCREEN -->
     <section id="screen-game" class="game-screen">
-      <!-- Game Top Bar -->
+      <!-- Game Top Status Header -->
       <div class="game-top-bar">
         <div class="top-bar-side top-bar-left">
           <span id="round-indicator" class="round-badge">دور ۱ از ۳</span>
           <button id="btn-toggle-scores" class="btn-icon mobile-action-btn" title="جدول امتیازات" aria-label="جدول امتیازات">
             🏆 <span id="mobile-my-rank" class="rank-badge">#۱</span>
           </button>
-        </div>
-
-        <div class="word-info-wrap">
-          <div id="word-display" class="masked-word">_ _ _ _</div>
-          <span id="word-category-badge" class="category-badge">دسته‌بندی: عمومی</span>
         </div>
 
         <div class="top-bar-side top-bar-right">
@@ -203,6 +198,14 @@
           </button>
           <button id="btn-game-mute" class="btn-icon header-btn mute-btn" title="قطع/وصل صدا" aria-label="قطع/وصل صدا">🔊</button>
           <button id="btn-leave-game" class="btn-icon leave-icon" title="خروج از بازی" aria-label="خروج از بازی">🚪</button>
+        </div>
+      </div>
+
+      <!-- Dedicated Word Display Bar (Directly Above Canvas / Arena) -->
+      <div id="game-word-bar" class="game-word-bar" role="region" aria-label="کلمه بازی">
+        <div class="word-info-wrap">
+          <div id="word-display" class="masked-word">_ _ _ _</div>
+          <span id="word-category-badge" class="category-badge">دسته‌بندی: عمومی</span>
         </div>
       </div>
 

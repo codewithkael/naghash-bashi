@@ -175,15 +175,6 @@
             }
             resolve('fallback-host');
           });
-
-          if (typeof window !== 'undefined' && !this.onlineListener) {
-            this.onlineListener = () => {
-              if (this.peer && !this.peer.destroyed && this.peer.disconnected) {
-                try { this.peer.reconnect(); } catch (_) {}
-              }
-            };
-            window.addEventListener('online', this.onlineListener);
-          }
         } catch (e) {
           console.warn('Peer init failed:', e);
           resolve('local-host');
@@ -206,32 +197,6 @@
       this.setupWebSocket(roomCode);
       this.setupKeepalive();
 
-      // Listen for network reconnect & tab visibility
-      if (typeof window !== 'undefined' && !this.onlineListener) {
-        this.onlineListener = () => {
-          if (this.peer && !this.peer.destroyed && this.peer.disconnected) {
-            try { this.peer.reconnect(); } catch (_) {}
-          }
-          if (!this.isHost && this.roomCode && (!this.hostConn || !this.hostConn.open)) {
-            console.log('Network back online. Reconnecting to room:', this.roomCode);
-            this.reconnect();
-          }
-        };
-        this.visibilityListener = () => {
-          if (document.visibilityState === 'visible') {
-            if (this.peer && !this.peer.destroyed && this.peer.disconnected) {
-              try { this.peer.reconnect(); } catch (_) {}
-            }
-            if (!this.isHost && this.roomCode && (!this.hostConn || !this.hostConn.open)) {
-              console.log('Tab visible. Checking connection for room:', this.roomCode);
-              this.reconnect();
-            }
-          }
-        };
-        window.addEventListener('online', this.onlineListener);
-        document.addEventListener('visibilitychange', this.visibilityListener);
-      }
-
       return new Promise((resolve) => {
         if (typeof Peer === 'undefined') {
           console.warn('PeerJS not loaded. Using BroadcastChannel for local join.');
@@ -247,13 +212,7 @@
       if (this.isDestroyed || this.isHost || !this.roomCode || !this.guestPlayerInfo) return;
       if (this.hostConn && this.hostConn.open) return;
 
-      console.log('Reconnection triggered for room:', this.roomCode);
-      if (this.peer && !this.peer.destroyed && this.peer.disconnected) {
-        try { this.peer.reconnect(); } catch (_) {}
-      }
       const hostPeerId = formatRoomPeerId(this.roomCode);
-      if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
-      this.reconnectAttempts = 0;
       this.connectGuestToHost(hostPeerId, this.guestPlayerInfo, null);
     }
 
@@ -273,7 +232,7 @@
           });
 
           this.peer.on('disconnected', () => {
-            console.warn('Guest PeerJS disconnected from signaling server. Reconnecting...');
+            console.warn('Guest PeerJS disconnected from signaling server.');
             if (!this.isDestroyed && this.peer && !this.peer.destroyed) {
               try { this.peer.reconnect(); } catch (_) {}
             }
@@ -281,12 +240,8 @@
 
           this.peer.on('error', (err) => {
             console.warn('Guest Peer error:', err.type, err);
-            if (err.type === 'peer-unavailable' && this.reconnectAttempts < this.maxReconnectAttempts) {
-              this.scheduleGuestRetry(hostPeerId, guestPlayer, resolvePromise);
-            } else {
-              this.sendLocalBroadcast({ type: 'JOIN', player: guestPlayer });
-              if (resolvePromise) resolvePromise(false);
-            }
+            this.sendLocalBroadcast({ type: 'JOIN', player: guestPlayer });
+            if (resolvePromise) resolvePromise(false);
           });
         } else if (this.peer.open) {
           this.attemptDataConnection(hostPeerId, guestPlayer, resolvePromise);
@@ -309,12 +264,11 @@
 
     attemptDataConnection(hostPeerId, guestPlayer, resolvePromise) {
       if (this.isDestroyed) return;
-      this.reconnectAttempts++;
 
       this.emit('onConnecting', {
-        attempt: this.reconnectAttempts,
-        max: this.maxReconnectAttempts,
-        message: `در حال اتصال به میزبان (تلاش ${this.reconnectAttempts} از ${this.maxReconnectAttempts})...`
+        attempt: 1,
+        max: 1,
+        message: 'در حال اتصال به اتاق مسابقه...'
       });
 
       try {
@@ -323,114 +277,57 @@
         });
 
         const connTimeout = setTimeout(() => {
-          if (!this.hostConn && this.reconnectAttempts < this.maxReconnectAttempts) {
-            console.log('Conn timeout, retrying with backoff...');
+          if (!this.hostConn) {
+            console.log('Connection timeout, falling back to local channel if available');
             try { conn.close(); } catch (_) {}
-            this.scheduleGuestRetry(hostPeerId, guestPlayer, resolvePromise);
+            this.sendLocalBroadcast({ type: 'JOIN', player: guestPlayer });
+            if (resolvePromise) resolvePromise(false);
           }
-        }, 4500);
-
-        // Track ICE connection state transitions
-        if (conn.peerConnection) {
-          conn.peerConnection.addEventListener('iceconnectionstatechange', () => {
-            const iceState = conn.peerConnection?.iceConnectionState;
-            if (iceState === 'disconnected' || iceState === 'failed') {
-              console.log('Guest ICE state changed:', iceState);
-              if (!this.isDestroyed && this.reconnectAttempts < this.maxReconnectAttempts) {
-                this.hostConn = null;
-                this.scheduleGuestRetry(hostPeerId, guestPlayer, null);
-              }
-            }
-          });
-        }
+        }, 5000);
 
         conn.on('open', () => {
           clearTimeout(connTimeout);
           console.log('Connected to host peer:', hostPeerId);
           this.hostConn = conn;
-          this.reconnectAttempts = 0;
           this.lastHostActivity = Date.now();
 
-          // Send JOIN packet with isReconnect if applicable
+          // Send clean JOIN packet once
           this.sendToHost({
             type: 'JOIN',
-            player: guestPlayer,
-            isReconnect: true
+            player: guestPlayer
           });
-
-          // Start handshake ack watchdog: if no room state received in 2.5s, re-send JOIN
-          if (this.joinHandshakeInterval) clearInterval(this.joinHandshakeInterval);
-          this.joinHandshakeInterval = setInterval(() => {
-            if (this.hostConn && this.hostConn.open) {
-              this.sendToHost({ type: 'JOIN', player: guestPlayer, isReconnect: true });
-            }
-          }, 2500);
 
           if (resolvePromise) resolvePromise(true);
         });
 
         conn.on('data', (data) => {
           this.lastHostActivity = Date.now();
-          if (this.joinHandshakeInterval) {
-            clearInterval(this.joinHandshakeInterval);
-            this.joinHandshakeInterval = null;
-          }
           this.handlePacket(data);
         });
 
         conn.on('close', () => {
           clearTimeout(connTimeout);
           console.log('Connection to host closed');
-          // If not explicitly destroyed, attempt re-connecting with backoff before giving up
-          if (!this.isDestroyed && this.reconnectAttempts < this.maxReconnectAttempts) {
-            this.hostConn = null;
-            this.scheduleGuestRetry(hostPeerId, guestPlayer, null);
-          } else {
-            this.emit('onError', 'ارتباط با میزبان بازی قطع شد. لطفاً اتصال اینترنت خود را بررسی کنید.');
-            this.emit('onPlayerLeft', 'host');
-          }
+          this.hostConn = null;
+          this.emit('onError', 'ارتباط با میزبان بازی قطع شد. لطفاً وضعیت اتاق را بررسی کنید.');
+          this.emit('onPlayerLeft', 'host');
         });
 
         conn.on('error', (err) => {
           clearTimeout(connTimeout);
           console.warn('Guest conn error:', err);
-          if (this.reconnectAttempts < this.maxReconnectAttempts) {
-            this.scheduleGuestRetry(hostPeerId, guestPlayer, resolvePromise);
-          } else {
-            this.sendLocalBroadcast({ type: 'JOIN', player: guestPlayer });
-            if (resolvePromise) resolvePromise(false);
-          }
+          this.sendLocalBroadcast({ type: 'JOIN', player: guestPlayer });
+          if (resolvePromise) resolvePromise(false);
         });
       } catch (e) {
         console.warn('attemptDataConnection exception:', e);
-        if (this.reconnectAttempts < this.maxReconnectAttempts) {
-          this.scheduleGuestRetry(hostPeerId, guestPlayer, resolvePromise);
-        }
+        this.sendLocalBroadcast({ type: 'JOIN', player: guestPlayer });
+        if (resolvePromise) resolvePromise(false);
       }
     }
 
     scheduleGuestRetry(hostPeerId, guestPlayer, resolvePromise) {
-      if (this.isDestroyed) return;
-      if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
-
-      // Exponential backoff: 1.2s, 1.8s, 2.7s, 4.0s, 6.0s, 8.0s + jitter
-      const exp = Math.min(6, this.reconnectAttempts);
-      const backoff = Math.min(8000, 1000 * Math.pow(1.45, exp));
-      const jitter = Math.floor(Math.random() * 300);
-      const delay = Math.round(backoff + jitter);
-
-      this.emit('onConnecting', {
-        attempt: this.reconnectAttempts + 1,
-        max: this.maxReconnectAttempts,
-        delay,
-        message: `در حال اتصال مجدد به مسابقه (تلاش ${this.reconnectAttempts + 1} از ${this.maxReconnectAttempts})...`
-      });
-
-      this.reconnectTimer = setTimeout(() => {
-        if (!this.isDestroyed && (!this.hostConn || !this.hostConn.open)) {
-          this.attemptDataConnection(hostPeerId, guestPlayer, resolvePromise);
-        }
-      }, delay);
+      // Kept for interface backward-compatibility as safe no-op
     }
 
     setupKeepalive() {
@@ -455,20 +352,8 @@
                 }
               }
             });
-          } else if (this.hostConn) {
-            if (this.hostConn.open) {
-              this.sendToHost({ type: 'PING' });
-            }
-
-            // Detect silent host (> 15s)
-            const now = Date.now();
-            if (now - this.lastHostActivity > 15000 && this.reconnectAttempts < this.maxReconnectAttempts) {
-              console.log('Host connection silent for > 15s. Triggering reconnection...');
-              try { this.hostConn.close(); } catch (_) {}
-              this.hostConn = null;
-              const hostPeerId = formatRoomPeerId(this.roomCode);
-              this.scheduleGuestRetry(hostPeerId, this.guestPlayerInfo, null);
-            }
+          } else if (this.hostConn && this.hostConn.open) {
+            this.sendToHost({ type: 'PING' });
           }
         } catch (_) {}
       }, 5000);

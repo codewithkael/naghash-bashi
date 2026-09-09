@@ -93,6 +93,7 @@
     els.timerText = document.getElementById('timer-text');
     els.wordDisplay = document.getElementById('word-display');
     els.wordCategoryBadge = document.getElementById('word-category-badge');
+    els.gameWordBar = document.getElementById('game-word-bar');
     els.btnMute = document.getElementById('btn-mute');
     els.btnGameMute = document.getElementById('btn-game-mute');
     els.btnLeaveGame = document.getElementById('btn-leave-game');
@@ -327,46 +328,12 @@
     return String(n).replace(/[0-9]/g, d => '۰۱۲۳۴۵۶۷۸۹'[d]);
   }
 
-  // --- Session Management & Persistence ---
-  function saveSession(data = {}) {
-    try {
-      const current = getSession() || {};
-      const updated = {
-        ...current,
-        playerId: state.myPlayerId,
-        name: state.myName,
-        avatar: state.myAvatar,
-        roomCode: state.roomCode,
-        isHost: state.isHost,
-        view: state.currentView,
-        roomSnapshot: state.isHost && state.gameRoom ? state.gameRoom.getStateSnapshot() : (current.roomSnapshot || null),
-        timestamp: Date.now(),
-        ...data
-      };
-      if (typeof sessionStorage !== 'undefined') {
-        sessionStorage.setItem('naghash_active_session', JSON.stringify(updated));
-      }
-      if (typeof localStorage !== 'undefined') {
-        localStorage.setItem('naghash_active_session', JSON.stringify(updated));
-      }
-    } catch (_) {}
+  // --- Session Management (Dropped per user request: keep state clean & straightforward) ---
+  function saveSession() {
+    // Deliberately dropped: prevents stale session hijacking
   }
 
   function getSession() {
-    try {
-      let raw = null;
-      if (typeof sessionStorage !== 'undefined') {
-        raw = sessionStorage.getItem('naghash_active_session');
-      }
-      if (!raw && typeof localStorage !== 'undefined') {
-        raw = localStorage.getItem('naghash_active_session');
-      }
-      if (!raw) return null;
-      const parsed = JSON.parse(raw);
-      if (parsed && (Date.now() - (parsed.timestamp || 0) < 2 * 3600 * 1000)) {
-        return parsed;
-      }
-    } catch (_) {}
     return null;
   }
 
@@ -379,6 +346,50 @@
         localStorage.removeItem('naghash_active_session');
       }
     } catch (_) {}
+  }
+
+  // --- Dedicated Word Bar Controller ---
+  function updateWordBanner(opts = {}) {
+    if (typeof opts.isDrawer === 'boolean') {
+      state.isDrawer = opts.isDrawer;
+    }
+    const wordBar = els.gameWordBar || document.getElementById('game-word-bar');
+    if (wordBar) {
+      wordBar.classList.toggle('is-drawer-banner', !!state.isDrawer);
+    }
+
+    if (state.isDrawer) {
+      const activeWord = opts.word || (state.currentWord ? state.currentWord.word : '');
+      const activeCategory = opts.category || (state.currentWord ? state.currentWord.category : '');
+      if (els.wordDisplay) {
+        els.wordDisplay.textContent = activeWord ? `🎨 کلمه شما: ${activeWord}` : '🎨 کلمه شما برای نقاشی: در حال انتخاب...';
+      }
+      if (els.wordCategoryBadge) {
+        if (activeCategory) {
+          els.wordCategoryBadge.textContent = activeCategory.startsWith('دسته‌بندی:') ? activeCategory : `دسته‌بندی: ${activeCategory}`;
+          els.wordCategoryBadge.style.display = 'inline-block';
+        } else {
+          els.wordCategoryBadge.style.display = 'none';
+        }
+      }
+    } else {
+      const activeMasked = opts.masked !== undefined ? opts.masked : (els.wordDisplay ? els.wordDisplay.textContent : '---');
+      let cat = opts.category !== undefined ? opts.category : (els.wordCategoryBadge ? els.wordCategoryBadge.textContent : '');
+      if (typeof cat === 'string' && cat.startsWith('دسته‌بندی: ')) {
+        cat = cat.replace('دسته‌بندی: ', '');
+      }
+      if (els.wordDisplay) {
+        els.wordDisplay.textContent = activeMasked || '---';
+      }
+      if (els.wordCategoryBadge) {
+        if (cat) {
+          els.wordCategoryBadge.textContent = `دسته‌بندی: ${cat}`;
+          els.wordCategoryBadge.style.display = 'inline-block';
+        } else {
+          els.wordCategoryBadge.style.display = 'none';
+        }
+      }
+    }
   }
 
   // --- Live Active Rooms Discovery ---
@@ -1092,12 +1103,18 @@
         }
       }
 
-      if (!state.isDrawer && roomState.maskedWord) {
-        els.wordDisplay.textContent = roomState.maskedWord;
-        if (roomState.wordCategory) {
-          els.wordCategoryBadge.textContent = `دسته‌بندی: ${roomState.wordCategory}`;
-          els.wordCategoryBadge.style.display = 'inline-block';
-        }
+      if (state.isDrawer && state.currentWord) {
+        updateWordBanner({
+          isDrawer: true,
+          word: state.currentWord.word,
+          category: state.currentWord.category
+        });
+      } else if (!state.isDrawer && roomState.maskedWord) {
+        updateWordBanner({
+          isDrawer: false,
+          masked: roomState.maskedWord,
+          category: roomState.wordCategory || ''
+        });
       }
     }
   }
@@ -1212,9 +1229,11 @@
           state.canvas.setInteractive(true);
         }
         updateToolbarsState();
-        els.wordDisplay.textContent = `کلمه شما برای نقاشی: ${c.word} ✏️`;
-        els.wordCategoryBadge.textContent = `دسته‌بندی: ${c.category}`;
-        els.wordCategoryBadge.style.display = 'inline-block';
+        updateWordBanner({
+          isDrawer: true,
+          word: c.word,
+          category: c.category
+        });
         updateInputState();
 
         if (state.isHost) {
@@ -1342,15 +1361,19 @@
         state.currentWord = data.wordObj;
       }
       if (state.currentWord) {
-        els.wordDisplay.textContent = `کلمه شما برای نقاشی: ${state.currentWord.word} ✏️`;
-        els.wordCategoryBadge.textContent = `دسته‌بندی: ${state.currentWord.category}`;
-        els.wordCategoryBadge.style.display = 'inline-block';
+        updateWordBanner({
+          isDrawer: true,
+          word: state.currentWord.word,
+          category: state.currentWord.category
+        });
       }
     } else {
       state.currentWord = null;
-      els.wordDisplay.textContent = data.masked || '---';
-      els.wordCategoryBadge.textContent = `دسته‌بندی: ${data.category || ''}`;
-      els.wordCategoryBadge.style.display = 'inline-block';
+      updateWordBanner({
+        isDrawer: false,
+        masked: data.masked || '---',
+        category: data.category || ''
+      });
     }
 
     updateInputState();
@@ -1368,16 +1391,16 @@
     els.overlayWaitingChoice.classList.remove('active');
 
     if (state.canvas) {
-      if (!data.isReconnect) {
-        state.canvas.clear(false);
-      }
+      state.canvas.clear(false);
       state.canvas.setInteractive(true);
     }
 
     updateToolbarsState();
-    els.wordDisplay.textContent = `کلمه شما برای نقاشی: ${data.wordObj.word} ✏️`;
-    els.wordCategoryBadge.textContent = `دسته‌بندی: ${data.wordObj.category}`;
-    els.wordCategoryBadge.style.display = 'inline-block';
+    updateWordBanner({
+      isDrawer: true,
+      word: data.wordObj.word,
+      category: data.wordObj.category
+    });
     updateInputState();
   }
 
@@ -1394,7 +1417,10 @@
     }
 
     if (!state.isDrawer && masked) {
-      els.wordDisplay.textContent = masked;
+      updateWordBanner({
+        isDrawer: false,
+        masked: masked
+      });
     }
   }
 
@@ -1987,44 +2013,9 @@
     });
   }
 
-  function checkSessionResume() {
-    const sess = getSession();
-    if (sess && sess.roomCode && sess.playerId === state.myPlayerId) {
-      console.log('Resuming session for room:', sess.roomCode);
-      if (sess.name) {
-        state.myName = sess.name;
-        if (els.playerNameInput) els.playerNameInput.value = sess.name;
-      }
-      if (sess.avatar) state.myAvatar = sess.avatar;
-
-      if (sess.isHost) {
-        state.isHost = true;
-        state.roomCode = sess.roomCode;
-        const hostPlayer = { id: state.myPlayerId, name: state.myName, avatar: state.myAvatar, isHost: true };
-        state.gameRoom = new RoomLogic.GameRoom(sess.roomCode, hostPlayer);
-        if (sess.roomSnapshot) {
-          state.gameRoom.restoreFromSnapshot(sess.roomSnapshot);
-        }
-        setupNetwork(true);
-        state.network.initHost(sess.roomCode, hostPlayer);
-        if (sess.roomSnapshot && (sess.roomSnapshot.status === 'CHOOSING' || sess.roomSnapshot.status === 'DRAWING' || sess.roomSnapshot.status === 'ROUND_END')) {
-          handleSyncRoomState(sess.roomSnapshot);
-          showView('game');
-        } else {
-          updateWaitingRoomUI();
-          showView('waiting');
-        }
-        notify(`نشست میزبانی در اتاق ${sess.roomCode} بازیابی شد.`, 'success');
-      } else {
-        joinRoom(sess.roomCode);
-      }
-      return true;
-    }
-    return false;
-  }
-
   // --- App Initialization ---
   function init() {
+    clearSession();
     initElements();
     initProfile();
     initRoomDiscovery();
@@ -2032,10 +2023,7 @@
     initCanvas();
     bindEvents();
 
-    const resumed = checkSessionResume();
-    if (!resumed) {
-      showView('lobby');
-    }
+    showView('lobby');
 
     // Register Service Worker for PWA
     if ('serviceWorker' in navigator && window.location.protocol.startsWith('http')) {

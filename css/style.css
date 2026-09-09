@@ -1014,32 +1014,74 @@ input[type="text"]:focus {
   white-space: nowrap;
 }
 
+/* Dedicated Word Display Bar (Directly Above Canvas / Arena) */
+.game-word-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-card-glass);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 10px 16px;
+  min-height: 52px;
+  box-shadow: var(--shadow-sm);
+  flex-shrink: 0;
+  width: 100%;
+  transition: border-color 0.25s ease, box-shadow 0.25s ease, background-color 0.25s ease;
+  z-index: 10;
+}
+
+.game-word-bar.is-drawer-banner {
+  border-color: var(--primary);
+  background: rgba(245, 158, 11, 0.12);
+  box-shadow: 0 0 16px var(--primary-glow);
+}
+
 .word-info-wrap {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 2px;
+  justify-content: center;
+  gap: 12px;
   flex: 1;
   min-width: 0;
+  text-align: center;
 }
 
 .masked-word {
-  font-size: 1.45rem;
+  font-size: 1.55rem;
   font-weight: 900;
-  letter-spacing: 5px;
+  letter-spacing: 6px;
   color: var(--primary);
-  text-shadow: 0 0 12px var(--primary-glow);
+  text-shadow: 0 0 14px var(--primary-glow);
   text-align: center;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 100%;
+  display: inline-block;
+  line-height: 1.2;
+}
+
+.game-word-bar.is-drawer-banner .masked-word {
+  font-size: 1.35rem;
+  letter-spacing: normal;
+  color: #fbbf24;
+  font-weight: 900;
+  text-shadow: 0 0 16px rgba(245, 158, 11, 0.5);
 }
 
 .category-badge {
-  font-size: 0.78rem;
+  font-size: 0.85rem;
+  font-weight: 700;
   color: var(--text-muted);
+  background: rgba(15, 23, 42, 0.65);
+  padding: 4px 12px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-subtle);
   white-space: nowrap;
+  display: inline-block;
 }
 
 .timer-pill {
@@ -2090,6 +2132,72 @@ input[type="text"]:focus {
   .drawer-close-btn {
     display: none !important;
   }
+  .mobile-action-btn {
+    display: none !important;
+  }
+  .mobile-player-ribbon {
+    display: none !important;
+  }
+  .drawer-backdrop {
+    display: none !important;
+  }
+
+  /* Desktop Classic Skribbl Party Layout */
+  #screen-game {
+    flex: 1;
+    min-height: auto;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 12px 20px;
+    gap: 12px;
+    max-width: 1400px;
+    margin: 0 auto;
+    width: 100%;
+  }
+
+  .game-top-bar {
+    padding: 8px 18px;
+    min-height: 52px;
+  }
+
+  .game-word-bar {
+    padding: 10px 24px;
+    min-height: 56px;
+    box-shadow: var(--shadow-md);
+  }
+
+  .game-word-bar .masked-word {
+    font-size: 1.7rem;
+    letter-spacing: 8px;
+  }
+
+  .game-word-bar.is-drawer-banner .masked-word {
+    font-size: 1.45rem;
+    letter-spacing: normal;
+  }
+
+  .game-arena {
+    display: grid;
+    grid-template-columns: 240px 1fr 300px;
+    gap: 14px;
+    flex: 1;
+    min-height: 540px;
+    height: calc(100vh - 185px);
+    max-height: 820px;
+    position: relative;
+  }
+
+  .sidebar-scoreboard, .sidebar-chat {
+    position: static !important;
+    transform: none !important;
+    width: auto !important;
+    height: 100% !important;
+    max-height: none !important;
+    display: flex !important;
+    flex-direction: column !important;
+    box-shadow: var(--shadow-sm) !important;
+    border-radius: var(--radius-md) !important;
+  }
 }
 
 /* Tablet & Mobile Screens (<= 900px) */
@@ -2120,8 +2228,16 @@ input[type="text"]:focus {
 
   .game-top-bar {
     padding: 6px 10px;
-    min-height: 44px;
+    min-height: 46px;
     gap: 6px;
+    flex-wrap: nowrap;
+    width: 100%;
+  }
+
+  .game-word-bar {
+    padding: 8px 12px;
+    min-height: 48px;
+    width: 100%;
   }
 
   .mobile-action-btn {
@@ -2311,53 +2427,77 @@ input[type="text"]:focus {
     font-size: 1.8rem;
   }
 
-  /* Game Top Bar: 2-Row Responsive Layout on Phones */
+  /* Game Top Bar: Single Non-Wrapping Status Row on Phones */
   .game-top-bar {
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     align-items: center;
     justify-content: space-between;
-    padding: 8px 10px;
-    gap: 8px 6px;
+    padding: 6px 10px;
+    gap: 6px;
+    min-height: 44px;
+    width: 100%;
   }
 
   .top-bar-side.top-bar-left {
-    order: 1;
     display: flex;
     align-items: center;
     gap: 6px;
+    flex-shrink: 0;
   }
 
   .top-bar-side.top-bar-right {
-    order: 2;
     display: flex;
     align-items: center;
     gap: 6px;
+    flex-shrink: 0;
+  }
+
+  /* Dedicated Word Banner Directly Above Canvas on Phones */
+  .game-word-bar {
+    width: 100%;
+    min-height: 48px;
+    padding: 8px 10px;
+    background: var(--bg-card-glass);
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .game-word-bar.is-drawer-banner {
+    border-color: var(--primary);
+    background: rgba(245, 158, 11, 0.14);
+    box-shadow: 0 0 16px var(--primary-glow);
   }
 
   .word-info-wrap {
     order: 3;
     width: 100%;
     flex: 1 1 100%;
-    padding: 8px 10px;
-    background: rgba(15, 23, 42, 0.7);
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--border-subtle);
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     align-items: center;
     justify-content: center;
     text-align: center;
-    gap: 4px;
+    gap: 8px;
   }
 
   .masked-word {
     font-size: 1.35rem;
+    font-weight: 900;
     letter-spacing: 4px;
-    line-height: 1.3;
+    line-height: 1.2;
     max-width: 100%;
     word-break: break-word;
     white-space: normal;
+  }
+
+  .game-word-bar.is-drawer-banner .masked-word {
+    font-size: 1.2rem;
+    letter-spacing: normal;
   }
 
   .category-badge {
