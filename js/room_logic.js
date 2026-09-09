@@ -53,8 +53,18 @@
     /**
      * Add player to room.
      * Enforces profanity filter and max 6 player capacity.
+     * Checks existing player identity FIRST to allow seamless reconnection even if room is full.
      */
     addPlayer(playerInfo) {
+      // Check if already in room first (seamless reconnection)
+      const existing = this.players.find(p => p.id === playerInfo.id);
+      if (existing) {
+        existing.connected = true;
+        if (playerInfo.name && playerInfo.name.trim()) existing.name = playerInfo.name.trim();
+        if (playerInfo.avatar) existing.avatar = playerInfo.avatar;
+        return { success: true, player: existing, isReconnect: true };
+      }
+
       if (this.players.length >= this.maxPlayers) {
         return { success: false, error: 'ROOM_FULL', message: 'ظرفیت اتاق تکمیل است (حداکثر ۶ نفر).' };
       }
@@ -65,15 +75,6 @@
         if (!check.isValid) {
           return { success: false, error: 'PROFANITY_DETECTED', message: check.reason };
         }
-      }
-
-      // Check if already in room
-      const existing = this.players.find(p => p.id === playerInfo.id);
-      if (existing) {
-        existing.connected = true;
-        if (playerInfo.name && playerInfo.name.trim()) existing.name = playerInfo.name.trim();
-        if (playerInfo.avatar) existing.avatar = playerInfo.avatar;
-        return { success: true, player: existing, isReconnect: true };
       }
 
       const isFirst = this.players.length === 0;
@@ -111,26 +112,59 @@
     }
 
     /**
-     * Record a drawing stroke / action for instant canvas replay on reconnect
+     * Record a drawing stroke / action for instant canvas replay on reconnect.
+     * Accurately reconstructs granular pointer events (STROKE_START, STROKE_MOVE, STROKE_END)
+     * as well as batch STROKE, FILL, CLEAR, and UNDO actions.
      */
     recordDrawingAction(action) {
       if (!action) return;
       if (action.type === 'CLEAR') {
         this.canvasHistory = [{ type: 'CLEAR' }];
+        this._currentStroke = null;
       } else if (action.type === 'UNDO') {
         if (this.canvasHistory.length > 0) {
           this.canvasHistory.pop();
         }
+        this._currentStroke = null;
+      } else if (action.type === 'STROKE_START') {
+        this._currentStroke = {
+          type: 'STROKE',
+          color: action.color,
+          size: action.size,
+          points: [{ rx: action.rx, ry: action.ry }]
+        };
+      } else if (action.type === 'STROKE_MOVE') {
+        if (!this._currentStroke) {
+          this._currentStroke = {
+            type: 'STROKE',
+            color: action.color,
+            size: action.size,
+            points: [action.from ? { rx: action.from.rx, ry: action.from.ry } : { rx: action.to.rx, ry: action.to.ry }]
+          };
+        }
+        this._currentStroke.points.push({ rx: action.to.rx, ry: action.to.ry });
+      } else if (action.type === 'STROKE_END') {
+        if (this._currentStroke && this._currentStroke.points.length > 0) {
+          this.canvasHistory.push(this._currentStroke);
+          if (this.canvasHistory.length > 100) {
+            this.canvasHistory.shift();
+          }
+          this._currentStroke = null;
+        }
       } else if (action.type === 'STROKE' || action.type === 'FILL') {
         this.canvasHistory.push(action);
-        if (this.canvasHistory.length > 60) {
+        if (this.canvasHistory.length > 100) {
           this.canvasHistory.shift();
         }
       }
     }
 
     getCanvasHistory() {
-      return Array.isArray(this.canvasHistory) ? [...this.canvasHistory] : [];
+      const history = Array.isArray(this.canvasHistory) ? [...this.canvasHistory] : [];
+      if (this._currentStroke && this._currentStroke.points && this._currentStroke.points.length > 0) {
+        history.push(this._currentStroke);
+      }
+      return history;
     }
 
     removePlayer(playerId) {
@@ -205,6 +239,7 @@
     startWordSelection() {
       this.status = 'CHOOSING';
       this.canvasHistory = [];
+      this._currentStroke = null;
       this.revealedIndices = new Set();
       this.turnGuessesCount = 0;
       this.players.forEach(p => {
@@ -232,6 +267,7 @@
       this.timerSeconds = DRAWING_TIME;
       this.revealedIndices = new Set();
       this.canvasHistory = [];
+      this._currentStroke = null;
 
       return {
         word: this.currentWord,
@@ -454,6 +490,42 @@
         wordDifficulty: this.currentWord ? this.currentWord.difficulty : null,
         canvasHistory: this.getCanvasHistory()
       };
+    }
+
+    /**
+     * Restore room and game state from snapshot (e.g. host refresh recovery)
+     */
+    restoreFromSnapshot(snapshot) {
+      if (!snapshot) return;
+      if (snapshot.roomCode) this.roomCode = snapshot.roomCode;
+      if (snapshot.status) this.status = snapshot.status;
+      if (snapshot.currentRound) this.currentRound = snapshot.currentRound;
+      if (snapshot.totalRounds) this.totalRounds = snapshot.totalRounds;
+      if (typeof snapshot.timerSeconds === 'number') this.timerSeconds = snapshot.timerSeconds;
+      if (Array.isArray(snapshot.canvasHistory)) {
+        this.canvasHistory = [...snapshot.canvasHistory];
+      }
+      this._currentStroke = null;
+
+      if (Array.isArray(snapshot.players) && snapshot.players.length > 0) {
+        this.players = snapshot.players.map(sp => ({
+          id: sp.id,
+          name: sp.name,
+          avatar: sp.avatar || '🎨',
+          isHost: !!sp.isHost,
+          score: sp.score || 0,
+          roundScore: sp.roundScore || 0,
+          guessedThisRound: !!sp.guessedThisRound,
+          isReady: sp.isReady !== false,
+          connected: sp.isHost ? true : (sp.connected !== undefined ? sp.connected : false),
+          isBot: !!sp.isBot
+        }));
+      }
+
+      if (snapshot.drawer && snapshot.drawer.id) {
+        const dIdx = this.players.findIndex(p => p.id === snapshot.drawer.id);
+        if (dIdx !== -1) this.drawerIndex = dIdx;
+      }
     }
   }
 

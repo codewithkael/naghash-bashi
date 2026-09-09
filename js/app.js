@@ -318,31 +318,50 @@
     return true;
   }
 
+  // --- Persian Number Helper ---
+  function toPersianDigits(n) {
+    if (n === null || n === undefined) return '';
+    return String(n).replace(/[0-9]/g, d => '۰۱۲۳۴۵۶۷۸۹'[d]);
+  }
+
   // --- Session Management & Persistence ---
   function saveSession(data = {}) {
     try {
+      const current = getSession() || {};
+      const updated = {
+        ...current,
+        playerId: state.myPlayerId,
+        name: state.myName,
+        avatar: state.myAvatar,
+        roomCode: state.roomCode,
+        isHost: state.isHost,
+        view: state.currentView,
+        roomSnapshot: state.isHost && state.gameRoom ? state.gameRoom.getStateSnapshot() : (current.roomSnapshot || null),
+        timestamp: Date.now(),
+        ...data
+      };
       if (typeof sessionStorage !== 'undefined') {
-        const current = getSession() || {};
-        const updated = {
-          playerId: state.myPlayerId,
-          name: state.myName,
-          avatar: state.myAvatar,
-          roomCode: state.roomCode,
-          isHost: state.isHost,
-          view: state.currentView,
-          ...current,
-          ...data
-        };
         sessionStorage.setItem('naghash_active_session', JSON.stringify(updated));
+      }
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('naghash_active_session', JSON.stringify(updated));
       }
     } catch (_) {}
   }
 
   function getSession() {
     try {
+      let raw = null;
       if (typeof sessionStorage !== 'undefined') {
-        const raw = sessionStorage.getItem('naghash_active_session');
-        return raw ? JSON.parse(raw) : null;
+        raw = sessionStorage.getItem('naghash_active_session');
+      }
+      if (!raw && typeof localStorage !== 'undefined') {
+        raw = localStorage.getItem('naghash_active_session');
+      }
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (parsed && (Date.now() - (parsed.timestamp || 0) < 2 * 3600 * 1000)) {
+        return parsed;
       }
     } catch (_) {}
     return null;
@@ -352,6 +371,9 @@
     try {
       if (typeof sessionStorage !== 'undefined') {
         sessionStorage.removeItem('naghash_active_session');
+      }
+      if (typeof localStorage !== 'undefined') {
+        localStorage.removeItem('naghash_active_session');
       }
     } catch (_) {}
   }
@@ -405,7 +427,7 @@
           <span class="room-item-code">${escapeHtml(r.roomCode)}</span>
           <span class="room-item-host">${escapeHtml(r.hostAvatar || '🎨')} ${escapeHtml(r.hostName || 'میزبان')}</span>
           <div class="room-item-meta">
-            <span class="room-players-badge">${pCount} از ${maxP} نفر</span>
+            <span class="room-players-badge">${toPersianDigits(pCount)} از ${toPersianDigits(maxP)} نفر</span>
             <span class="room-status-badge ${statusClass}">${statusText}</span>
           </div>
         </div>
@@ -577,6 +599,17 @@
           state.network.broadcast({ type: 'CHAT', ...rejoinNotice });
           renderChatMessage(rejoinNotice);
 
+          // Catch up reconnecting player if in CHOOSING phase and player is drawer
+          if (state.gameRoom.status === 'CHOOSING') {
+            const drawer = state.gameRoom.getDrawer();
+            if (drawer && drawer.id === packet.player.id && state.gameRoom.wordChoices && state.gameRoom.wordChoices.length > 0) {
+              state.network.sendToPeer(fromPeerId, {
+                type: 'WORD_CHOICES',
+                choices: state.gameRoom.wordChoices
+              });
+            }
+          }
+
           // Catch up reconnecting player if in active drawing/guessing phase
           if (state.gameRoom.status === 'DRAWING' || state.gameRoom.status === 'ROUND_END') {
             const drawer = state.gameRoom.getDrawer();
@@ -585,7 +618,8 @@
                 type: 'DRAWER_SECRET_WORD',
                 drawerId: drawer.id,
                 wordObj: state.gameRoom.currentWord,
-                timerSeconds: state.gameRoom.timerSeconds
+                timerSeconds: state.gameRoom.timerSeconds,
+                isReconnect: true
               });
             }
 
@@ -774,8 +808,14 @@
     if (typeof ConfettiEngine !== 'undefined') {
       ConfettiEngine.stop();
     }
+    state.isDrawer = false;
+    state.currentWord = null;
+    els.overlayWordChoice.classList.remove('active');
+    els.overlayWaitingChoice.classList.remove('active');
+    els.overlayRoundEnd.classList.remove('active');
     if (state.canvas) {
       state.canvas.clear(false);
+      state.canvas.setInteractive(false);
     }
     closeAllDrawers();
 
@@ -801,8 +841,14 @@
     if (typeof ConfettiEngine !== 'undefined') {
       ConfettiEngine.stop();
     }
+    state.isDrawer = false;
+    state.currentWord = null;
+    els.overlayWordChoice.classList.remove('active');
+    els.overlayWaitingChoice.classList.remove('active');
+    els.overlayRoundEnd.classList.remove('active');
     if (state.canvas) {
       state.canvas.clear(false);
+      state.canvas.setInteractive(false);
     }
     closeAllDrawers();
 
@@ -971,15 +1017,21 @@
       showView('waiting');
     }
 
+    if (roomState.drawer) {
+      state.isDrawer = (roomState.drawer.id === state.myPlayerId);
+    }
+
     saveSession({ roomCode: roomState.roomCode, currentView: state.currentView });
 
     // Catch up canvas history for guest or reconnecting player
-    if (inActiveGame && state.canvas && Array.isArray(roomState.canvasHistory) && roomState.canvasHistory.length > 0 && (!state.canvas.history || state.canvas.history.length === 0)) {
-      state.canvas.applyRemoteAction({ type: 'FULL_SYNC', history: roomState.canvasHistory });
+    if (inActiveGame && state.canvas && Array.isArray(roomState.canvasHistory) && roomState.canvasHistory.length > 0) {
+      if (!state.canvas.history || state.canvas.history.length !== roomState.canvasHistory.length) {
+        state.canvas.applyRemoteAction({ type: 'FULL_SYNC', history: roomState.canvasHistory });
+      }
     }
 
     if (state.currentView === 'waiting') {
-      els.waitingCount.textContent = `${roomState.players.length} از ۶ نفر`;
+      els.waitingCount.textContent = `${toPersianDigits(roomState.players.length)} از ${toPersianDigits(RoomLogic.MAX_PLAYERS)} نفر`;
       els.waitingPlayerSlots.innerHTML = '';
       for (let i = 0; i < RoomLogic.MAX_PLAYERS; i++) {
         const p = roomState.players[i];
@@ -1015,7 +1067,17 @@
 
     if (state.currentView === 'game') {
       renderScoreboard(roomState.players, roomState.drawer);
-      els.roundIndicator.textContent = `دور ${roomState.currentRound} از ${roomState.totalRounds}`;
+      els.roundIndicator.textContent = `دور ${toPersianDigits(roomState.currentRound)} از ${toPersianDigits(roomState.totalRounds)}`;
+
+      if (typeof roomState.timerSeconds === 'number') {
+        handleTick(roomState.timerSeconds, roomState.maskedWord);
+      }
+
+      if (state.canvas) {
+        state.canvas.setInteractive(state.isDrawer);
+      }
+      updateToolbarsState();
+      updateInputState();
 
       if (roomState.status === 'CHOOSING') {
         const drawerId = roomState.drawer ? roomState.drawer.id : null;
@@ -1303,7 +1365,9 @@
     els.overlayWaitingChoice.classList.remove('active');
 
     if (state.canvas) {
-      state.canvas.clear(false);
+      if (!data.isReconnect) {
+        state.canvas.clear(false);
+      }
       state.canvas.setInteractive(true);
     }
 
@@ -1911,10 +1975,18 @@
         state.roomCode = sess.roomCode;
         const hostPlayer = { id: state.myPlayerId, name: state.myName, avatar: state.myAvatar, isHost: true };
         state.gameRoom = new RoomLogic.GameRoom(sess.roomCode, hostPlayer);
+        if (sess.roomSnapshot) {
+          state.gameRoom.restoreFromSnapshot(sess.roomSnapshot);
+        }
         setupNetwork(true);
         state.network.initHost(sess.roomCode, hostPlayer);
-        updateWaitingRoomUI();
-        showView('waiting');
+        if (sess.roomSnapshot && (sess.roomSnapshot.status === 'CHOOSING' || sess.roomSnapshot.status === 'DRAWING' || sess.roomSnapshot.status === 'ROUND_END')) {
+          handleSyncRoomState(sess.roomSnapshot);
+          showView('game');
+        } else {
+          updateWaitingRoomUI();
+          showView('waiting');
+        }
         notify(`نشست میزبانی در اتاق ${sess.roomCode} بازیابی شد.`, 'success');
       } else {
         joinRoom(sess.roomCode);

@@ -37,7 +37,8 @@
         username: 'username1',
         credential: 'password1'
       }
-    ]
+    ],
+    iceCandidatePoolSize: 10
   };
 
   function formatRoomPeerId(code) {
@@ -78,6 +79,8 @@
       this.peerToPlayerId = new Map();      // peerId -> playerId
       this.playerIdToPeer = new Map();      // playerId -> peerId
       this.disconnectTimers = new Map();    // playerId -> setTimeout ID
+      this.peerLastActivity = new Map();    // peerId/playerId -> timestamp
+      this.lastHostActivity = Date.now();   // For guest: timestamp of last packet from host
       this.hostConn = null;                 // For guest: DataConnection to host
       this.broadcastChannel = null;         // Local BroadcastChannel
       this.ws = null;                       // Local WebSocket connection if server.js is active
@@ -152,6 +155,13 @@
             resolve(id);
           });
 
+          this.peer.on('disconnected', () => {
+            console.warn('Host PeerJS disconnected from signaling server. Reconnecting...');
+            if (!this.isDestroyed && this.peer && !this.peer.destroyed) {
+              try { this.peer.reconnect(); } catch (_) {}
+            }
+          });
+
           this.peer.on('connection', (conn) => {
             this.handleIncomingConnection(conn);
           });
@@ -165,6 +175,15 @@
             }
             resolve('fallback-host');
           });
+
+          if (typeof window !== 'undefined' && !this.onlineListener) {
+            this.onlineListener = () => {
+              if (this.peer && !this.peer.destroyed && this.peer.disconnected) {
+                try { this.peer.reconnect(); } catch (_) {}
+              }
+            };
+            window.addEventListener('online', this.onlineListener);
+          }
         } catch (e) {
           console.warn('Peer init failed:', e);
           resolve('local-host');
@@ -180,6 +199,7 @@
       this.roomCode = roomCode;
       this.myPlayerId = guestPlayer.id;
       this.guestPlayerInfo = guestPlayer;
+      this.lastHostActivity = Date.now();
 
       const hostPeerId = formatRoomPeerId(roomCode);
       this.setupBroadcastChannel(roomCode);
@@ -189,6 +209,9 @@
       // Listen for network reconnect & tab visibility
       if (typeof window !== 'undefined' && !this.onlineListener) {
         this.onlineListener = () => {
+          if (this.peer && !this.peer.destroyed && this.peer.disconnected) {
+            try { this.peer.reconnect(); } catch (_) {}
+          }
           if (!this.isHost && this.roomCode && (!this.hostConn || !this.hostConn.open)) {
             console.log('Network back online. Reconnecting to room:', this.roomCode);
             this.reconnect();
@@ -196,6 +219,9 @@
         };
         this.visibilityListener = () => {
           if (document.visibilityState === 'visible') {
+            if (this.peer && !this.peer.destroyed && this.peer.disconnected) {
+              try { this.peer.reconnect(); } catch (_) {}
+            }
             if (!this.isHost && this.roomCode && (!this.hostConn || !this.hostConn.open)) {
               console.log('Tab visible. Checking connection for room:', this.roomCode);
               this.reconnect();
@@ -222,6 +248,9 @@
       if (this.hostConn && this.hostConn.open) return;
 
       console.log('Reconnection triggered for room:', this.roomCode);
+      if (this.peer && !this.peer.destroyed && this.peer.disconnected) {
+        try { this.peer.reconnect(); } catch (_) {}
+      }
       const hostPeerId = formatRoomPeerId(this.roomCode);
       if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
       this.reconnectAttempts = 0;
@@ -243,6 +272,13 @@
             this.attemptDataConnection(hostPeerId, guestPlayer, resolvePromise);
           });
 
+          this.peer.on('disconnected', () => {
+            console.warn('Guest PeerJS disconnected from signaling server. Reconnecting...');
+            if (!this.isDestroyed && this.peer && !this.peer.destroyed) {
+              try { this.peer.reconnect(); } catch (_) {}
+            }
+          });
+
           this.peer.on('error', (err) => {
             console.warn('Guest Peer error:', err.type, err);
             if (err.type === 'peer-unavailable' && this.reconnectAttempts < this.maxReconnectAttempts) {
@@ -254,6 +290,11 @@
           });
         } else if (this.peer.open) {
           this.attemptDataConnection(hostPeerId, guestPlayer, resolvePromise);
+        } else if (this.peer.disconnected) {
+          try { this.peer.reconnect(); } catch (_) {}
+          this.peer.once('open', () => {
+            this.attemptDataConnection(hostPeerId, guestPlayer, resolvePromise);
+          });
         } else {
           this.peer.once('open', () => {
             this.attemptDataConnection(hostPeerId, guestPlayer, resolvePromise);
@@ -287,13 +328,28 @@
             try { conn.close(); } catch (_) {}
             this.scheduleGuestRetry(hostPeerId, guestPlayer, resolvePromise);
           }
-        }, 4000);
+        }, 4500);
+
+        // Track ICE connection state transitions
+        if (conn.peerConnection) {
+          conn.peerConnection.addEventListener('iceconnectionstatechange', () => {
+            const iceState = conn.peerConnection?.iceConnectionState;
+            if (iceState === 'disconnected' || iceState === 'failed') {
+              console.log('Guest ICE state changed:', iceState);
+              if (!this.isDestroyed && this.reconnectAttempts < this.maxReconnectAttempts) {
+                this.hostConn = null;
+                this.scheduleGuestRetry(hostPeerId, guestPlayer, null);
+              }
+            }
+          });
+        }
 
         conn.on('open', () => {
           clearTimeout(connTimeout);
           console.log('Connected to host peer:', hostPeerId);
           this.hostConn = conn;
           this.reconnectAttempts = 0;
+          this.lastHostActivity = Date.now();
 
           // Send JOIN packet with isReconnect if applicable
           this.sendToHost({
@@ -314,6 +370,7 @@
         });
 
         conn.on('data', (data) => {
+          this.lastHostActivity = Date.now();
           if (this.joinHandshakeInterval) {
             clearInterval(this.joinHandshakeInterval);
             this.joinHandshakeInterval = null;
@@ -383,11 +440,38 @@
         try {
           if (this.isHost) {
             this.broadcast({ type: 'PING' });
-          } else if (this.hostConn && this.hostConn.open) {
-            this.sendToHost({ type: 'PING' });
+
+            // Detect silent peers (unresponsive > 20s)
+            const now = Date.now();
+            this.peerLastActivity.forEach((lastSeen, id) => {
+              if (now - lastSeen > 20000) {
+                const conn = this.connections.get(id);
+                const playerId = this.peerToPlayerId.get(id) || id;
+                if (conn && (!conn.open || now - lastSeen > 26000)) {
+                  console.log('Peer timed out (silent):', id);
+                  try { conn.close(); } catch (_) {}
+                  this.connections.delete(id);
+                  this.handlePeerDisconnection(playerId);
+                }
+              }
+            });
+          } else if (this.hostConn) {
+            if (this.hostConn.open) {
+              this.sendToHost({ type: 'PING' });
+            }
+
+            // Detect silent host (> 15s)
+            const now = Date.now();
+            if (now - this.lastHostActivity > 15000 && this.reconnectAttempts < this.maxReconnectAttempts) {
+              console.log('Host connection silent for > 15s. Triggering reconnection...');
+              try { this.hostConn.close(); } catch (_) {}
+              this.hostConn = null;
+              const hostPeerId = formatRoomPeerId(this.roomCode);
+              this.scheduleGuestRetry(hostPeerId, this.guestPlayerInfo, null);
+            }
           }
         } catch (_) {}
-      }, 8000);
+      }, 5000);
     }
 
     /**
@@ -494,6 +578,18 @@
       // Immediately register connection in map so replies can be routed right away
       this.connections.set(peerId, conn);
 
+      // Listen for ICE connection state changes
+      if (conn.peerConnection) {
+        conn.peerConnection.addEventListener('iceconnectionstatechange', () => {
+          const iceState = conn.peerConnection?.iceConnectionState;
+          if (iceState === 'disconnected' || iceState === 'failed') {
+            console.log('Host detected peer ICE state change:', peerId, iceState);
+            const playerId = this.peerToPlayerId.get(peerId);
+            this.handlePeerDisconnection(playerId || peerId);
+          }
+        });
+      }
+
       conn.on('open', () => {
         console.log('Host accepted peer connection from:', peerId);
         this.connections.set(peerId, conn);
@@ -547,15 +643,9 @@
     handleGuestMessage(fromPeerId, packet) {
       if (!packet) return;
 
-      if (packet.type === 'PING') {
-        this.sendToPeer(fromPeerId, { type: 'PONG' });
-        return;
-      }
-      if (packet.type === 'PONG') return;
-
       const pId = packet.playerId || (packet.player && packet.player.id) || packet.senderId;
 
-      // If reconnecting player had a disconnect grace timer, cancel it
+      // If reconnecting player had a disconnect grace timer, cancel it immediately on ANY packet (including PING)
       if (pId && this.disconnectTimers.has(pId)) {
         clearTimeout(this.disconnectTimers.get(pId));
         this.disconnectTimers.delete(pId);
@@ -563,6 +653,14 @@
 
       if (packet.senderId) this.registerPlayerPeer(packet.senderId, fromPeerId);
       if (packet.player && packet.player.id) this.registerPlayerPeer(packet.player.id, fromPeerId);
+      if (fromPeerId) this.peerLastActivity.set(fromPeerId, Date.now());
+      if (pId) this.peerLastActivity.set(pId, Date.now());
+
+      if (packet.type === 'PING') {
+        this.sendToPeer(fromPeerId, { type: 'PONG' });
+        return;
+      }
+      if (packet.type === 'PONG') return;
 
       // Explicit LEAVE requested by user
       if (packet.type === 'LEAVE') {
@@ -836,8 +934,8 @@
 
         Object.keys(roomsMap).forEach((code) => {
           const r = roomsMap[code];
-          // Consider alive if updated in last 14 seconds
-          if (r && (now - (r.updatedAt || 0) < 14000)) {
+          // Consider alive if updated in last 16 seconds
+          if (r && (now - (r.updatedAt || 0) < 16000)) {
             active.push(r);
           } else {
             delete roomsMap[code];
@@ -878,6 +976,51 @@
         window.addEventListener('storage', storageListener);
       }
 
+      // WebSocket relay discovery when running via server.js
+      let discoveryWs = null;
+      if (typeof window !== 'undefined' && window.location && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || (window.location.port && window.location.hostname !== 'github.io'))) {
+        try {
+          const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+          const wsUrl = `${proto}//${window.location.host}`;
+          discoveryWs = new WebSocket(wsUrl);
+          discoveryWs.onopen = () => {
+            discoveryWs.send(JSON.stringify({ action: 'GET_ROOMS' }));
+          };
+          discoveryWs.onmessage = (evt) => {
+            try {
+              const data = JSON.parse(evt.data);
+              if (data.action === 'ROOMS_LIST' && Array.isArray(data.rooms)) {
+                if (typeof localStorage !== 'undefined') {
+                  const raw = localStorage.getItem('naghash_active_rooms');
+                  const map = raw ? JSON.parse(raw) : {};
+                  data.rooms.forEach(r => { if (r && r.roomCode) map[r.roomCode] = r; });
+                  localStorage.setItem('naghash_active_rooms', JSON.stringify(map));
+                }
+                callback(NetworkManager.getActiveRooms());
+              } else if (data.action === 'ROOM_ANNOUNCED' && data.room) {
+                if (typeof localStorage !== 'undefined') {
+                  const raw = localStorage.getItem('naghash_active_rooms');
+                  const map = raw ? JSON.parse(raw) : {};
+                  map[data.room.roomCode] = data.room;
+                  localStorage.setItem('naghash_active_rooms', JSON.stringify(map));
+                }
+                callback(NetworkManager.getActiveRooms());
+              } else if (data.action === 'ROOM_CLOSED' && data.roomCode) {
+                if (typeof localStorage !== 'undefined') {
+                  const raw = localStorage.getItem('naghash_active_rooms');
+                  if (raw) {
+                    const map = JSON.parse(raw);
+                    delete map[data.roomCode];
+                    localStorage.setItem('naghash_active_rooms', JSON.stringify(map));
+                  }
+                }
+                callback(NetworkManager.getActiveRooms());
+              }
+            } catch (_) {}
+          };
+        } catch (_) {}
+      }
+
       return {
         unregister() {
           if (bc) {
@@ -885,6 +1028,10 @@
           }
           if (typeof window !== 'undefined') {
             window.removeEventListener('storage', storageListener);
+          }
+          if (discoveryWs) {
+            try { discoveryWs.close(); } catch (_) {}
+            discoveryWs = null;
           }
         }
       };
@@ -927,6 +1074,7 @@
       }
       this.disconnectTimers.forEach(t => clearTimeout(t));
       this.disconnectTimers.clear();
+      this.peerLastActivity.clear();
 
       // Send explicit leave signal before closing
       try {

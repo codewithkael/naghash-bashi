@@ -96,6 +96,21 @@ assert.strictEqual(reconnectRes.player.connected, true, 'Player must be restored
 assert.strictEqual(reconnectRes.player.score, p1Score, 'Player score must be preserved on reconnect');
 assert.strictEqual(room.players.length, 3, 'Player count must remain 3');
 
+// Test 2b: Reconnection in a full 6-player room (critical bug fix test)
+const fullRoom = new GameRoom('NB-FULL', { id: 'host1', name: 'میزبان' });
+for (let i = 2; i <= 6; i++) {
+  fullRoom.addPlayer({ id: `p${i}`, name: `بازیکن ${i}` });
+}
+assert.strictEqual(fullRoom.players.length, 6);
+fullRoom.markPlayerDisconnected('p3');
+assert.strictEqual(fullRoom.players.length, 6);
+// p3 reconnects
+const fullReconnect = fullRoom.addPlayer({ id: 'p3', name: 'بازیکن ۳' });
+assert.strictEqual(fullReconnect.success, true, 'Reconnecting player in full room must NOT fail with ROOM_FULL');
+assert.strictEqual(fullReconnect.isReconnect, true);
+assert.strictEqual(fullReconnect.player.connected, true);
+console.log('✓ Reconnection in a full 6-player room successfully verified.');
+
 // Reconnection packet cancels disconnect grace timer in NetworkManager
 netHost.handleGuestMessage('peer_reconnect_123', {
   type: 'JOIN',
@@ -149,6 +164,27 @@ room.recordDrawingAction({ type: 'CLEAR' });
 assert.strictEqual(room.getCanvasHistory().length, 1);
 assert.strictEqual(room.getCanvasHistory()[0].type, 'CLEAR');
 console.log('✓ Canvas UNDO and CLEAR actions correctly reflected in canvas history.');
+
+// Test granular pointer events reconstruction (live drawing network packets)
+room.recordDrawingAction({ type: 'CLEAR' });
+assert.strictEqual(room.getCanvasHistory().length, 1);
+room.recordDrawingAction({ type: 'STROKE_START', rx: 0.2, ry: 0.2, color: '#ef4444', size: 6 });
+room.recordDrawingAction({ type: 'STROKE_MOVE', from: { rx: 0.2, ry: 0.2 }, to: { rx: 0.5, ry: 0.5 }, color: '#ef4444', size: 6 });
+room.recordDrawingAction({ type: 'STROKE_END' });
+const liveHistory = room.getCanvasHistory();
+assert.strictEqual(liveHistory.length, 2);
+assert.strictEqual(liveHistory[1].type, 'STROKE');
+assert.strictEqual(liveHistory[1].color, '#ef4444');
+assert.strictEqual(liveHistory[1].points.length, 2);
+console.log('✓ Granular network pointer events correctly reconstructed into canvas history.');
+
+// Test restoreFromSnapshot
+const roomRestore = new GameRoom('NB-NEW', { id: 'p_host', name: 'استاد نقاش' });
+roomRestore.restoreFromSnapshot(snap);
+assert.strictEqual(roomRestore.roomCode, 'NB-7777');
+assert.strictEqual(roomRestore.players.length, 3);
+assert.strictEqual(roomRestore.status, 'DRAWING');
+console.log('✓ GameRoom.restoreFromSnapshot correctly restores room, players, and canvas state.');
 
 // =========================================================================
 // 4. Post-Game Seamless Room Retention ("Play Again")
