@@ -47,8 +47,10 @@
     els.playerNameInput = document.getElementById('player-name-input');
     els.nameError = document.getElementById('name-error');
     els.avatarGrid = document.getElementById('avatar-grid');
+    els.appContainer = document.getElementById('app-container');
     els.btnCreateRoom = document.getElementById('btn-create-room');
     els.roomCodeInput = document.getElementById('room-code-input');
+    els.joinRoomForm = document.getElementById('join-room-form');
     els.btnJoinRoom = document.getElementById('btn-join-room');
     els.btnPracticeBots = document.getElementById('btn-practice-bots');
     els.installBtn = document.getElementById('btn-install-pwa');
@@ -72,6 +74,7 @@
     els.wordDisplay = document.getElementById('word-display');
     els.wordCategoryBadge = document.getElementById('word-category-badge');
     els.btnMute = document.getElementById('btn-mute');
+    els.btnGameMute = document.getElementById('btn-game-mute');
     els.btnLeaveGame = document.getElementById('btn-leave-game');
     els.scoreboardList = document.getElementById('scoreboard-list');
 
@@ -158,7 +161,8 @@
       els.drawingToolbar.style.display = state.isDrawer ? 'flex' : 'none';
     }
     if (els.guesserToolbar) {
-      els.guesserToolbar.style.display = state.isDrawer ? 'none' : 'flex';
+      // For guessers: clear inline style so CSS media queries control visibility (mobile=flex, desktop=none)
+      els.guesserToolbar.style.display = state.isDrawer ? 'none' : '';
     }
   }
 
@@ -190,6 +194,10 @@
     els.screenGame.classList.toggle('active', viewName === 'game');
     els.screenGameOver.classList.toggle('active', viewName === 'gameover');
 
+    if (els.appContainer) {
+      els.appContainer.classList.toggle('in-game', viewName === 'game');
+    }
+
     closeAllDrawers();
 
     if (viewName === 'game') {
@@ -207,6 +215,16 @@
     if (!s) return '';
     if (s === 'gameover') return 'GameOver';
     return s.charAt(0).toUpperCase() + s.slice(1);
+  }
+
+  function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 
   // --- Profile & Avatars ---
@@ -282,8 +300,16 @@
   // --- Audio Mute Button ---
   function updateMuteButton() {
     const isMuted = SoundEngine.getMuted();
-    els.btnMute.textContent = isMuted ? '🔇' : '🔊';
-    els.btnMute.setAttribute('title', isMuted ? 'صدای بازی قطع است' : 'صدای بازی وصل است');
+    const icon = isMuted ? '🔇' : '🔊';
+    const tip = isMuted ? 'صدای بازی قطع است' : 'صدای بازی وصل است';
+    if (els.btnMute) {
+      els.btnMute.textContent = icon;
+      els.btnMute.setAttribute('title', tip);
+    }
+    if (els.btnGameMute) {
+      els.btnGameMute.textContent = icon;
+      els.btnGameMute.setAttribute('title', tip);
+    }
   }
 
   // --- Network Initialization ---
@@ -647,8 +673,8 @@
 
       if (p) {
         slot.innerHTML = `
-          <div class="slot-avatar">${p.avatar}</div>
-          <div class="slot-name">${p.name} ${p.isHost ? '👑' : ''}</div>
+          <div class="slot-avatar">${escapeHtml(p.avatar)}</div>
+          <div class="slot-name">${escapeHtml(p.name)} ${p.isHost ? '👑' : ''}</div>
           <div class="slot-badge">${p.isHost ? 'میزبان' : (p.isBot ? 'ربات' : 'آماده')}</div>
         `;
       } else {
@@ -689,8 +715,8 @@
 
         if (p) {
           slot.innerHTML = `
-            <div class="slot-avatar">${p.avatar}</div>
-            <div class="slot-name">${p.name} ${p.isHost ? '👑' : ''}</div>
+            <div class="slot-avatar">${escapeHtml(p.avatar)}</div>
+            <div class="slot-name">${escapeHtml(p.name)} ${p.isHost ? '👑' : ''}</div>
             <div class="slot-badge">${p.isHost ? 'میزبان' : (p.isBot ? 'ربات' : 'آماده')}</div>
           `;
         } else {
@@ -1063,7 +1089,7 @@
       const row = document.createElement('div');
       row.className = 'round-score-row';
       row.innerHTML = `
-        <span class="p-name">${p.avatar} ${p.name}</span>
+        <span class="p-name">${escapeHtml(p.avatar)} ${escapeHtml(p.name)}</span>
         <span class="p-delta">+${p.roundScore || 0}</span>
         <span class="p-total">${p.score} امتیاز</span>
       `;
@@ -1089,21 +1115,21 @@
     const { first, second, third, all } = data.podium;
     els.podiumContainer.innerHTML = `
       <div class="podium-step step-second">
-        <div class="podium-avatar">${second ? second.avatar : '🥈'}</div>
-        <div class="podium-name">${second ? second.name : '---'}</div>
+        <div class="podium-avatar">${second ? escapeHtml(second.avatar) : '🥈'}</div>
+        <div class="podium-name">${second ? escapeHtml(second.name) : '---'}</div>
         <div class="podium-score">${second ? second.score + ' امتیاز' : ''}</div>
         <div class="podium-box">۲ 🥈</div>
       </div>
       <div class="podium-step step-first">
         <div class="podium-crown">👑</div>
-        <div class="podium-avatar">${first ? first.avatar : '🥇'}</div>
-        <div class="podium-name">${first ? first.name : '---'}</div>
+        <div class="podium-avatar">${first ? escapeHtml(first.avatar) : '🥇'}</div>
+        <div class="podium-name">${first ? escapeHtml(first.name) : '---'}</div>
         <div class="podium-score">${first ? first.score + ' امتیاز' : ''}</div>
         <div class="podium-box">۱ 🥇</div>
       </div>
       <div class="podium-step step-third">
-        <div class="podium-avatar">${third ? third.avatar : '🥉'}</div>
-        <div class="podium-name">${third ? third.name : '---'}</div>
+        <div class="podium-avatar">${third ? escapeHtml(third.avatar) : '🥉'}</div>
+        <div class="podium-name">${third ? escapeHtml(third.name) : '---'}</div>
         <div class="podium-score">${third ? third.score + ' امتیاز' : ''}</div>
         <div class="podium-box">۳ 🥉</div>
       </div>
@@ -1116,8 +1142,8 @@
       row.className = 'game-over-row';
       row.innerHTML = `
         <span class="rank-num">#${idx + 1}</span>
-        <span class="rank-avatar">${p.avatar}</span>
-        <span class="rank-name">${p.name}</span>
+        <span class="rank-avatar">${escapeHtml(p.avatar)}</span>
+        <span class="rank-name">${escapeHtml(p.name)}</span>
         <span class="rank-score">${p.score} امتیاز</span>
       `;
       els.gameOverScores.appendChild(row);
@@ -1139,9 +1165,9 @@
 
         item.innerHTML = `
           <div class="score-rank">#${idx + 1}</div>
-          <div class="score-avatar">${p.avatar}</div>
+          <div class="score-avatar">${escapeHtml(p.avatar)}</div>
           <div class="score-details">
-            <div class="score-name">${p.name} ${isDrawer ? '✏️' : (p.guessedThisRound ? '✅' : '')}</div>
+            <div class="score-name">${escapeHtml(p.name)} ${isDrawer ? '✏️' : (p.guessedThisRound ? '✅' : '')}</div>
             <div class="score-pts">${p.score} امتیاز</div>
           </div>
         `;
@@ -1162,8 +1188,8 @@
         const chip = document.createElement('div');
         chip.className = 'ribbon-chip' + (isMe ? ' is-me' : '') + (isDrawer ? ' is-drawer' : '') + (p.guessedThisRound ? ' guessed' : '');
         chip.innerHTML = `
-          <span class="ribbon-avatar">${p.avatar}</span>
-          <span class="ribbon-name">${p.name}</span>
+          <span class="ribbon-avatar">${escapeHtml(p.avatar)}</span>
+          <span class="ribbon-name">${escapeHtml(p.name)}</span>
           <span class="ribbon-score">${p.score}</span>
           ${isDrawer ? '<span>✏️</span>' : (p.guessedThisRound ? '<span>✅</span>' : '')}
         `;
@@ -1179,9 +1205,9 @@
       div.className = 'chat-message' + (msg.isSystem ? ' system-msg' : '') + (msg.isCorrect ? ' correct-msg' : '');
 
       if (msg.isSystem) {
-        div.innerHTML = `<span class="msg-icon">${msg.avatar || '📢'}</span> <span class="msg-text">${msg.text}</span>`;
+        div.innerHTML = `<span class="msg-icon">${escapeHtml(msg.avatar || '📢')}</span> <span class="msg-text">${escapeHtml(msg.text)}</span>`;
       } else {
-        div.innerHTML = `<span class="msg-sender">${msg.avatar || ''} ${msg.sender}:</span> <span class="msg-text">${msg.text}</span>`;
+        div.innerHTML = `<span class="msg-sender">${escapeHtml(msg.avatar || '')} ${escapeHtml(msg.sender)}:</span> <span class="msg-text">${escapeHtml(msg.text)}</span>`;
         SoundEngine.playChatPop();
       }
 
@@ -1194,9 +1220,9 @@
       const tickerItem = document.createElement('div');
       tickerItem.className = 'ticker-item' + (msg.isCorrect ? ' correct' : '');
       if (msg.isSystem) {
-        tickerItem.innerHTML = `<span>${msg.avatar || '📢'}</span> <span>${msg.text}</span>`;
+        tickerItem.innerHTML = `<span>${escapeHtml(msg.avatar || '📢')}</span> <span>${escapeHtml(msg.text)}</span>`;
       } else {
-        tickerItem.innerHTML = `<strong>${msg.avatar || ''} ${msg.sender}:</strong> <span>${msg.text}</span>`;
+        tickerItem.innerHTML = `<strong>${escapeHtml(msg.avatar || '')} ${escapeHtml(msg.sender)}:</strong> <span>${escapeHtml(msg.text)}</span>`;
       }
       els.recentChatTicker.appendChild(tickerItem);
 
@@ -1396,9 +1422,26 @@
       els.nameError.style.display = 'none';
     });
 
-    els.roomCodeInput.addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') joinRoom();
+    els.playerNameInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (els.roomCodeInput) els.roomCodeInput.focus();
+      }
     });
+
+    els.roomCodeInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        joinRoom();
+      }
+    });
+
+    if (els.joinRoomForm) {
+      els.joinRoomForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        joinRoom();
+      });
+    }
 
     // Waiting Room Actions
     els.btnCopyCode.addEventListener('click', () => {
@@ -1470,6 +1513,13 @@
       updateMuteButton();
     });
 
+    if (els.btnGameMute) {
+      els.btnGameMute.addEventListener('click', () => {
+        SoundEngine.toggleMute();
+        updateMuteButton();
+      });
+    }
+
     els.btnLeaveGame.addEventListener('click', () => {
       if (confirm('آیا مطمئن هستید که می‌خواهید از بازی خارج شوید؟')) {
         closeAllDrawers();
@@ -1516,6 +1566,20 @@
         }
       }, 200);
     });
+
+    // Visual Viewport API for dynamic virtual keyboard adaptation on mobile
+    if (typeof window !== 'undefined' && window.visualViewport) {
+      const handleVisualViewport = () => {
+        const vh = window.visualViewport.height;
+        document.documentElement.style.setProperty('--vvh', `${vh}px`);
+        if (state.canvas && state.currentView === 'game') {
+          state.canvas.setupCanvas();
+        }
+      };
+      window.visualViewport.addEventListener('resize', handleVisualViewport);
+      window.visualViewport.addEventListener('scroll', handleVisualViewport);
+      handleVisualViewport();
+    }
 
     // PWA Install prompt
     window.addEventListener('beforeinstallprompt', (e) => {

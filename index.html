@@ -81,12 +81,12 @@
             <div class="action-icon">🔑</div>
             <h3>پیوستن به اتاق</h3>
             <p>کد ۶ رقمی اتاق دوستتان را وارد کنید و وارد رقابت شوید.</p>
-            <div class="join-input-wrap">
-              <input type="text" id="room-code-input" placeholder="مثال: NB-256" maxlength="8" autocomplete="off" autocapitalize="characters">
-              <button id="btn-join-room" class="btn btn-secondary">
+            <form id="join-room-form" class="join-input-wrap">
+              <input type="text" id="room-code-input" placeholder="مثال: NB-256" maxlength="8" autocomplete="off" autocapitalize="characters" autocorrect="off" enterkeyhint="go">
+              <button type="submit" id="btn-join-room" class="btn btn-secondary">
                 ورود 🚀
               </button>
-            </div>
+            </form>
           </div>
 
           <!-- Practice with Bots -->
@@ -181,6 +181,7 @@
           <button id="btn-toggle-chat" class="btn-icon mobile-action-btn" title="گفت‌وگو و حدس‌ها" aria-label="گفت‌وگو و حدس‌ها">
             💬 <span id="chat-unread-badge" class="unread-badge" style="display: none;">۰</span>
           </button>
+          <button id="btn-game-mute" class="btn-icon header-btn mute-btn" title="قطع/وصل صدا" aria-label="قطع/وصل صدا">🔊</button>
           <button id="btn-leave-game" class="btn-icon leave-icon" title="خروج از بازی" aria-label="خروج از بازی">🚪</button>
         </div>
       </div>
@@ -296,7 +297,7 @@
 
             <!-- Quick Guess Form -->
             <form id="quick-guess-form" class="quick-guess-form">
-              <input type="text" id="quick-guess-input" placeholder="حدس خود را اینجا بنویسید..." autocomplete="off">
+              <input type="text" id="quick-guess-input" placeholder="حدس خود را اینجا بنویسید..." autocomplete="off" autocorrect="off" autocapitalize="off" enterkeyhint="send">
               <button type="submit" id="quick-guess-send-btn" class="btn btn-primary btn-quick-send">ارسال 🚀</button>
             </form>
           </div>
@@ -310,7 +311,7 @@
           </div>
           <div id="chat-messages" class="chat-stream"></div>
           <form id="chat-form" class="chat-form">
-            <input type="text" id="chat-input" placeholder="حدس خود را اینجا بنویسید..." autocomplete="off">
+            <input type="text" id="chat-input" placeholder="حدس خود را اینجا بنویسید..." autocomplete="off" autocorrect="off" autocapitalize="off" enterkeyhint="send">
             <button type="submit" id="chat-send-btn" class="btn btn-chat">ارسال</button>
           </form>
         </aside>

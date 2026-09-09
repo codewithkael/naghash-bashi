@@ -68,6 +68,34 @@ console.log('6. Verifying Responsive Breakpoints in style.css...');
 assert.ok(cssContent.includes('@media (max-width: 900px)'), 'CSS must define tablet/mobile breakpoint at 900px');
 assert.ok(cssContent.includes('@media (max-width: 600px)'), 'CSS must define mobile phones breakpoint at 600px');
 assert.ok(cssContent.includes('@media (max-width: 400px)'), 'CSS must define small mobile phones breakpoint at 400px');
+assert.ok(cssContent.includes('@media (min-width: 901px)'), 'CSS must isolate desktop view above 900px');
 console.log('   ✓ Responsive media queries verified.');
+
+// 7. Virtual Viewport Keyboard Adaptation
+console.log('7. Verifying Virtual Viewport & Mobile Keyboard Adaptation...');
+assert.ok(appJsContent.includes('visualViewport'), 'app.js must register visualViewport resize handler');
+assert.ok(cssContent.includes('--vvh'), 'CSS must adapt app container height to --vvh for soft keyboard');
+assert.ok(htmlContent.includes('enterkeyhint="send"'), 'Quick guess input must declare enterkeyhint="send"');
+assert.ok(htmlContent.includes('enterkeyhint="go"'), 'Room code input must declare enterkeyhint="go"');
+console.log('   ✓ Virtual viewport & keyboard ergonomics verified.');
+
+// 8. Touch Action Gesture Granularity
+console.log('8. Verifying Touch Action Gesture Granularity...');
+assert.ok(cssContent.includes('touch-action: pan-x !important'), 'Mobile ribbon and palette must permit horizontal swipe gesture');
+assert.ok(cssContent.includes('touch-action: pan-y !important'), 'Drawers, chat stream and modals must permit vertical swipe gesture');
+console.log('   ✓ Touch action gesture granularity verified.');
+
+// 9. Canvas Pointer Capture & Context Preservation
+console.log('9. Verifying Pointer Capture & Context Preservation...');
+assert.ok(canvasJsContent.includes('setPointerCapture'), 'DrawingCanvas must capture pointer for uninterrupted strokes');
+assert.ok(canvasJsContent.includes('releasePointerCapture'), 'DrawingCanvas must release pointer capture on stroke completion');
+assert.ok(canvasJsContent.includes('strokeStyle = drawColor'), 'setupCanvas must restore strokeStyle after resize context wipe');
+console.log('   ✓ Pointer capture & context preservation verified.');
+
+// 10. XSS Sanitization & Security Ergonomics
+console.log('10. Verifying XSS Sanitization & Chat Security...');
+assert.ok(appJsContent.includes('function escapeHtml'), 'app.js must provide escapeHtml sanitizer');
+assert.ok(appJsContent.includes('escapeHtml(msg.text)'), 'Chat messages must be sanitized before DOM injection');
+console.log('   ✓ XSS sanitization verified.');
 
 console.log('\n🎉 ALL RESPONSIVE & MOBILE PWA TESTS PASSED FLAWLESSLY! 🎉\n');

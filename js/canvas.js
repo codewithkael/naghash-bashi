@@ -59,6 +59,10 @@
 
       this.ctx.lineCap = 'round';
       this.ctx.lineJoin = 'round';
+      const drawColor = this.currentTool === 'eraser' ? '#ffffff' : this.currentColor;
+      this.ctx.strokeStyle = drawColor;
+      this.ctx.fillStyle = drawColor;
+      this.ctx.lineWidth = this.currentSize;
 
       if (this.history && this.history.length > 0) {
         this.redrawFromHistory();
@@ -154,6 +158,12 @@
         this.isDrawing = true;
         this.lastPoint = pos;
 
+        if (this.canvas.setPointerCapture && e.pointerId !== undefined) {
+          try {
+            this.canvas.setPointerCapture(e.pointerId);
+          } catch (err) {}
+        }
+
         const color = this.currentTool === 'eraser' ? '#ffffff' : this.currentColor;
         const size = this.currentSize;
 
@@ -211,6 +221,11 @@
       };
 
       const handlePointerUp = (e) => {
+        if (this.canvas.releasePointerCapture && e.pointerId !== undefined) {
+          try {
+            this.canvas.releasePointerCapture(e.pointerId);
+          } catch (err) {}
+        }
         if (!this.isInteractive || !this.isDrawing) return;
         e.preventDefault();
         this.isDrawing = false;

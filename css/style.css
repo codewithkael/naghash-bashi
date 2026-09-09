@@ -109,7 +109,8 @@ html, body {
 #app-container {
   width: 100%;
   height: 100%;
-  height: 100dvh;
+  height: var(--vvh, 100dvh);
+  min-height: var(--vvh, 100dvh);
   max-width: 1440px;
   margin: 0 auto;
   display: flex;
@@ -245,6 +246,7 @@ html, body {
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
   padding: 16px;
 }
 
@@ -252,8 +254,9 @@ html, body {
 #screen-game {
   overflow: hidden !important;
   touch-action: none !important;
+  flex: 1;
+  min-height: 0;
   height: 100%;
-  height: 100dvh;
   display: none;
   flex-direction: column;
   padding: 10px 14px;
@@ -277,7 +280,7 @@ html, body {
   display: flex;
   flex-direction: column;
   gap: 20px;
-  margin: auto 0;
+  margin: 0 auto;
 }
 
 .profile-card {
@@ -615,7 +618,7 @@ input[type="text"]:focus {
   display: flex;
   flex-direction: column;
   gap: 20px;
-  margin: auto 0;
+  margin: 0 auto;
 }
 
 .room-code-banner {
@@ -924,6 +927,7 @@ input[type="text"]:focus {
   flex-shrink: 0;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
+  touch-action: pan-x !important;
 }
 
 .mobile-player-ribbon::-webkit-scrollbar {
@@ -1023,6 +1027,8 @@ input[type="text"]:focus {
   flex-direction: column;
   gap: 6px;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y !important;
   flex: 1;
   min-height: 0;
   padding-left: 2px;
@@ -1235,6 +1241,7 @@ input[type="text"]:focus {
   overflow-x: auto;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
+  touch-action: pan-x !important;
 }
 
 .palette-scroll-container::-webkit-scrollbar {
@@ -1388,6 +1395,7 @@ input[type="text"]:focus {
   gap: 6px;
   padding-left: 2px;
   -webkit-overflow-scrolling: touch;
+  touch-action: pan-y !important;
 }
 
 .chat-message {
@@ -1458,14 +1466,17 @@ input[type="text"]:focus {
 .modal-overlay {
   position: absolute;
   inset: 0;
-  background: rgba(11, 17, 32, 0.9);
+  background: rgba(11, 17, 32, 0.92);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   display: none;
   align-items: center;
   justify-content: center;
   z-index: 70;
-  padding: 16px;
+  padding: 12px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y !important;
 }
 
 .modal-overlay.active {
@@ -1479,6 +1490,10 @@ input[type="text"]:focus {
   padding: 24px;
   max-width: 520px;
   width: 100%;
+  max-height: 96%;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y !important;
   text-align: center;
   box-shadow: var(--shadow-lg);
 }
@@ -1646,7 +1661,7 @@ input[type="text"]:focus {
   flex-direction: column;
   gap: 20px;
   box-shadow: var(--shadow-lg);
-  margin: auto 0;
+  margin: 0 auto;
 }
 
 .gameover-title {
@@ -1834,8 +1849,23 @@ input[type="text"]:focus {
    RESPONSIVE LAYOUT SYSTEM (Desktop, Tablet, Mobile)
    ========================================================================== */
 
+/* Desktop Display Safeguards (> 900px) */
+@media (min-width: 901px) {
+  .guesser-toolbar-wrap {
+    display: none !important;
+  }
+  .drawer-close-btn {
+    display: none !important;
+  }
+}
+
 /* Tablet & Mobile Screens (<= 900px) */
 @media (max-width: 900px) {
+  /* Hide main header during active gameplay on mobile to prioritize canvas */
+  #app-container.in-game .main-header {
+    display: none !important;
+  }
+
   /* Header Compact Mode */
   .main-header {
     padding: 8px 14px;
@@ -1885,8 +1915,8 @@ input[type="text"]:focus {
     bottom: 0;
     left: 0;
     right: 0;
-    max-height: 75vh;
-    height: auto;
+    height: 65vh;
+    max-height: 80vh;
     background: rgba(15, 23, 42, 0.98);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
@@ -1898,6 +1928,7 @@ input[type="text"]:focus {
     box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.7);
     padding: 16px;
     padding-bottom: max(16px, var(--sab));
+    touch-action: pan-y !important;
   }
 
   .sidebar-scoreboard.open, .sidebar-chat.open {
@@ -1935,14 +1966,37 @@ input[type="text"]:focus {
     grid-template-columns: repeat(3, 1fr);
   }
 
-  /* Word choice cards stack vertically */
+  /* Word choice cards layout on mobile */
+  .word-choice-modal, .waiting-choice-modal, .round-end-modal {
+    padding: 14px 10px;
+    max-height: 94%;
+  }
+
+  .modal-icon, .spinner-brush {
+    font-size: 1.8rem;
+    margin-bottom: 4px;
+  }
+
+  .word-timer-badge {
+    padding: 4px 12px;
+    font-size: 0.85rem;
+    margin: 4px auto 8px auto;
+  }
+
   .word-choices-grid {
-    grid-template-columns: 1fr;
-    gap: 8px;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    margin-top: 6px;
   }
 
   .word-choice-card {
-    min-height: 60px;
+    min-height: 52px;
+    padding: 8px 4px;
+    gap: 2px;
+  }
+
+  .card-word {
+    font-size: 1.02rem;
   }
 }
 
@@ -1990,7 +2044,37 @@ input[type="text"]:focus {
 
   .masked-word {
     font-size: 1.25rem;
-    letter-spacing: 4px;
+    letter-spacing: 3px;
+  }
+
+  .drawer-status-pill {
+    padding: 2px 8px;
+    font-size: 0.74rem;
+  }
+
+  .toolbar-controls-row {
+    justify-content: center;
+    gap: 6px;
+  }
+
+  .tool-btn, .brush-size-btn {
+    width: 35px;
+    height: 35px;
+    font-size: 1rem;
+  }
+
+  .palette-color {
+    width: 28px;
+    height: 28px;
+  }
+
+  .word-choice-card {
+    min-height: 48px;
+    padding: 6px 3px;
+  }
+
+  .card-word {
+    font-size: 0.94rem;
   }
 
   .podium-wrap {
@@ -2027,29 +2111,38 @@ input[type="text"]:focus {
   }
 
   .round-badge {
-    padding: 4px 8px;
-    font-size: 0.78rem;
+    padding: 4px 6px;
+    font-size: 0.75rem;
   }
 
   .timer-pill {
-    padding: 4px 8px;
-    min-width: 65px;
-    font-size: 0.95rem;
+    padding: 4px 6px;
+    min-width: 60px;
+    font-size: 0.9rem;
   }
 
   .masked-word {
-    font-size: 1.1rem;
-    letter-spacing: 3px;
+    font-size: 1.05rem;
+    letter-spacing: 2px;
   }
 
   .tool-btn, .brush-size-btn {
     width: 32px;
     height: 32px;
-    font-size: 0.95rem;
+    font-size: 0.92rem;
   }
 
   .palette-color {
     width: 24px;
     height: 24px;
+  }
+
+  .word-choice-card {
+    min-height: 44px;
+    padding: 4px 2px;
+  }
+
+  .card-word {
+    font-size: 0.88rem;
   }
 }
