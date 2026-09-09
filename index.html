@@ -100,6 +100,26 @@
           </div>
         </div>
 
+        <!-- Live Active Rooms Discovery Section -->
+        <div class="active-rooms-card" id="active-rooms-section">
+          <div class="active-rooms-header">
+            <div class="active-rooms-title-group">
+              <span class="pulse-indicator" aria-hidden="true"></span>
+              <h3 class="active-rooms-title">اتاق‌های عمومی و در حال بازی</h3>
+            </div>
+            <button id="btn-refresh-rooms" class="btn-icon btn-chip refresh-rooms-btn" title="به‌روزرسانی لیست اتاق‌ها">
+              🔄 به‌روزرسانی
+            </button>
+          </div>
+          <div id="active-rooms-list" class="active-rooms-list">
+            <!-- Dynamically populated -->
+          </div>
+          <div id="active-rooms-empty" class="active-rooms-empty" style="display: none;">
+            <span>در حال حاضر هیچ اتاق عمومی فعالی یافت نشد.</span>
+            <p>می‌توانید با زدن «ایجاد اتاق جدید» اولین اتاق را بسازید و دوستانتان را دعوت کنید!</p>
+          </div>
+        </div>
+
         <!-- Footer Info Badges -->
         <div class="lobby-badges">
           <span class="badge-item">🌐 اتصال P2P بدون نیاز به سرور (GitHub Pages Ready)</span>

@@ -53,6 +53,7 @@ const server = http.createServer((req, res) => {
 
 // --- Zero-Dependency RFC 6455 WebSocket Room Relay ---
 const rooms = new Map(); // roomCode -> Set<socket>
+const activeRooms = new Map(); // roomCode -> room metadata
 
 function encodeTextFrame(text) {
   const buf = Buffer.from(text, 'utf8');
@@ -176,7 +177,11 @@ server.on('upgrade', (req, socket) => {
         room.delete(socket);
         if (room.size === 0) {
           rooms.delete(socket.meta.roomCode);
+          activeRooms.delete(socket.meta.roomCode);
         } else if (socket.meta.playerId) {
+          if (socket.meta.isHost) {
+            activeRooms.delete(socket.meta.roomCode);
+          }
           room.forEach((s) => {
             sendToSocket(s, {
               action: 'PLAYER_DISCONNECTED',
@@ -196,6 +201,47 @@ function handleClientMessage(socket, text) {
   try {
     const msg = JSON.parse(text);
     if (!msg || !msg.action) return;
+
+    if (msg.action === 'ANNOUNCE_ROOM' && msg.room) {
+      const r = msg.room;
+      r.updatedAt = Date.now();
+      const code = (r.roomCode || '').toUpperCase();
+      activeRooms.set(code, r);
+
+      rooms.forEach((sockSet) => {
+        sockSet.forEach((s) => {
+          if (s !== socket) {
+            sendToSocket(s, { action: 'ROOM_ANNOUNCED', room: r });
+          }
+        });
+      });
+      return;
+    }
+
+    if (msg.action === 'GET_ROOMS') {
+      const now = Date.now();
+      activeRooms.forEach((r, code) => {
+        if (now - (r.updatedAt || 0) > 15000) {
+          activeRooms.delete(code);
+        }
+      });
+      sendToSocket(socket, {
+        action: 'ROOMS_LIST',
+        rooms: Array.from(activeRooms.values())
+      });
+      return;
+    }
+
+    if (msg.action === 'CLOSE_ROOM') {
+      const code = (msg.roomCode || socket.meta.roomCode || '').toUpperCase();
+      activeRooms.delete(code);
+      rooms.forEach((sockSet) => {
+        sockSet.forEach((s) => {
+          sendToSocket(s, { action: 'ROOM_CLOSED', roomCode: code });
+        });
+      });
+      return;
+    }
 
     if (msg.action === 'REGISTER_ROOM') {
       const roomCode = (msg.roomCode || '').toUpperCase();
@@ -251,6 +297,7 @@ if (!server.listening) {
 module.exports = {
   server,
   rooms,
+  activeRooms,
   encodeTextFrame,
   PORT
 };

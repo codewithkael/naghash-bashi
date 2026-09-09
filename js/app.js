@@ -10,9 +10,21 @@
   // Available avatars
   const AVATARS = ['🎨', '🦁', '🐱', '🚀', '☕', '🤖', '🦊', '👑'];
 
+  // Retrieve or generate stable persistent player ID
+  let storedPlayerId = null;
+  try {
+    if (typeof localStorage !== 'undefined') {
+      storedPlayerId = localStorage.getItem('naghash_player_id');
+      if (!storedPlayerId) {
+        storedPlayerId = 'p_' + Math.random().toString(36).substr(2, 9);
+        localStorage.setItem('naghash_player_id', storedPlayerId);
+      }
+    }
+  } catch (_) {}
+
   // Global app state
   const state = {
-    myPlayerId: 'p_' + Math.random().toString(36).substr(2, 9),
+    myPlayerId: storedPlayerId || ('p_' + Math.random().toString(36).substr(2, 9)),
     myName: '',
     myAvatar: '🎨',
     isHost: false,
@@ -29,6 +41,8 @@
     currentWord: null,
     turnTimerInterval: null,
     wordSelectionTimeout: null,
+    roomsRefreshInterval: null,
+    roomDiscoverySub: null,
     deferredPrompt: null,
     unreadChatCount: 0
   };
@@ -54,6 +68,12 @@
     els.btnJoinRoom = document.getElementById('btn-join-room');
     els.btnPracticeBots = document.getElementById('btn-practice-bots');
     els.installBtn = document.getElementById('btn-install-pwa');
+
+    // Active Rooms Discovery
+    els.activeRoomsSection = document.getElementById('active-rooms-section');
+    els.activeRoomsList = document.getElementById('active-rooms-list');
+    els.activeRoomsEmpty = document.getElementById('active-rooms-empty');
+    els.btnRefreshRooms = document.getElementById('btn-refresh-rooms');
 
     // Waiting Room
     els.displayRoomCode = document.getElementById('display-room-code');
@@ -294,7 +314,118 @@
     els.nameError.style.display = 'none';
     state.myName = raw;
     localStorage.setItem('naghash_player_name', raw);
+    saveSession({ name: raw });
     return true;
+  }
+
+  // --- Session Management & Persistence ---
+  function saveSession(data = {}) {
+    try {
+      if (typeof sessionStorage !== 'undefined') {
+        const current = getSession() || {};
+        const updated = {
+          playerId: state.myPlayerId,
+          name: state.myName,
+          avatar: state.myAvatar,
+          roomCode: state.roomCode,
+          isHost: state.isHost,
+          view: state.currentView,
+          ...current,
+          ...data
+        };
+        sessionStorage.setItem('naghash_active_session', JSON.stringify(updated));
+      }
+    } catch (_) {}
+  }
+
+  function getSession() {
+    try {
+      if (typeof sessionStorage !== 'undefined') {
+        const raw = sessionStorage.getItem('naghash_active_session');
+        return raw ? JSON.parse(raw) : null;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  function clearSession() {
+    try {
+      if (typeof sessionStorage !== 'undefined') {
+        sessionStorage.removeItem('naghash_active_session');
+      }
+    } catch (_) {}
+  }
+
+  // --- Live Active Rooms Discovery ---
+  function initRoomDiscovery() {
+    renderActiveRoomsList(NetworkEngine.NetworkManager.getActiveRooms());
+
+    if (state.roomDiscoverySub) {
+      state.roomDiscoverySub.unregister();
+    }
+    state.roomDiscoverySub = NetworkEngine.NetworkManager.listenToActiveRooms((rooms) => {
+      if (state.currentView === 'lobby') {
+        renderActiveRoomsList(rooms);
+      }
+    });
+
+    if (state.roomsRefreshInterval) clearInterval(state.roomsRefreshInterval);
+    state.roomsRefreshInterval = setInterval(() => {
+      if (state.currentView === 'lobby') {
+        renderActiveRoomsList(NetworkEngine.NetworkManager.getActiveRooms());
+      }
+    }, 3500);
+  }
+
+  function renderActiveRoomsList(rooms = []) {
+    if (!els.activeRoomsList || !els.activeRoomsEmpty) return;
+
+    if (!rooms || rooms.length === 0) {
+      els.activeRoomsList.innerHTML = '';
+      els.activeRoomsEmpty.style.display = 'flex';
+      return;
+    }
+
+    els.activeRoomsEmpty.style.display = 'none';
+    els.activeRoomsList.innerHTML = '';
+
+    rooms.forEach((r) => {
+      const item = document.createElement('div');
+      item.className = 'active-room-item';
+
+      const isLobby = r.status === 'LOBBY';
+      const statusText = isLobby ? 'در انتظار بازیکن ⏳' : 'در حال مسابقه 🎨';
+      const statusClass = isLobby ? 'status-lobby' : 'status-ingame';
+      const pCount = r.playerCount || 1;
+      const maxP = r.maxPlayers || 6;
+      const isFull = pCount >= maxP;
+
+      item.innerHTML = `
+        <div class="room-item-info">
+          <span class="room-item-code">${escapeHtml(r.roomCode)}</span>
+          <span class="room-item-host">${escapeHtml(r.hostAvatar || '🎨')} ${escapeHtml(r.hostName || 'میزبان')}</span>
+          <div class="room-item-meta">
+            <span class="room-players-badge">${pCount} از ${maxP} نفر</span>
+            <span class="room-status-badge ${statusClass}">${statusText}</span>
+          </div>
+        </div>
+        <button type="button" class="btn btn-secondary btn-quick-join" data-code="${escapeHtml(r.roomCode)}" ${isFull ? 'disabled' : ''}>
+          ${isFull ? 'ظرفیت تکمیل 🔒' : 'ورود سریع 🚀'}
+        </button>
+      `;
+
+      const btnJoin = item.querySelector('.btn-quick-join');
+      if (btnJoin && !isFull) {
+        btnJoin.addEventListener('click', () => {
+          if (els.roomCodeInput) {
+            els.roomCodeInput.value = r.roomCode;
+          }
+          joinRoom(r.roomCode);
+        });
+      }
+
+      els.activeRoomsList.appendChild(item);
+    });
   }
 
   // --- Audio Mute Button ---
@@ -333,8 +464,19 @@
       onPlayerLeft: (playerId) => {
         handlePlayerLeft(playerId);
       },
+      onPlayerTemporarilyDisconnected: (playerId) => {
+        handlePlayerTemporarilyDisconnected(playerId);
+      },
       onPlayerDisconnected: (playerId) => {
         handlePlayerLeft(playerId);
+      },
+      onCanvasFullSync: (packet) => {
+        if (state.canvas && Array.isArray(packet.history)) {
+          state.canvas.applyRemoteAction({ type: 'FULL_SYNC', history: packet.history });
+        }
+      },
+      onPlayAgain: (packet) => {
+        handlePlayAgainGuest(packet);
       },
       onRoomState: (roomState) => {
         handleSyncRoomState(roomState);
@@ -409,7 +551,7 @@
           return;
         }
 
-        // Send direct state to joining peer
+        // Send direct state snapshot to joining/reconnecting peer
         state.network.sendToPeer(fromPeerId, {
           type: 'ROOM_STATE',
           state: state.gameRoom.getStateSnapshot()
@@ -418,8 +560,54 @@
         // Broadcast full state to all peers
         broadcastRoomState();
         updateWaitingRoomUI();
-        SoundEngine.playTurnStart();
-        notify(`👋 ${packet.player.name} وارد اتاق شد!`, 'info');
+
+        if (state.network && state.isHost) {
+          state.network.updateDiscoveryStatus(state.gameRoom.status, state.gameRoom.players.length);
+        }
+
+        if (res.isReconnect) {
+          SoundEngine.playTurnStart();
+          notify(`🔄 ${packet.player.name} مجدداً به مسابقه متصل شد!`, 'success');
+          const rejoinNotice = {
+            sender: 'سیستم',
+            avatar: '🔄',
+            text: `${packet.player.name} مجدداً به بازی متصل شد.`,
+            isSystem: true
+          };
+          state.network.broadcast({ type: 'CHAT', ...rejoinNotice });
+          renderChatMessage(rejoinNotice);
+
+          // Catch up reconnecting player if in active drawing/guessing phase
+          if (state.gameRoom.status === 'DRAWING' || state.gameRoom.status === 'ROUND_END') {
+            const drawer = state.gameRoom.getDrawer();
+            if (drawer && drawer.id === packet.player.id) {
+              state.network.sendToPeer(fromPeerId, {
+                type: 'DRAWER_SECRET_WORD',
+                drawerId: drawer.id,
+                wordObj: state.gameRoom.currentWord,
+                timerSeconds: state.gameRoom.timerSeconds
+              });
+            }
+
+            // Immediately send complete canvas history playback
+            const history = (state.canvas && state.canvas.history && state.canvas.history.length > 0)
+              ? state.canvas.history
+              : state.gameRoom.getCanvasHistory();
+            if (history && history.length > 0) {
+              state.network.sendToPeer(fromPeerId, {
+                type: 'CANVAS_FULL_SYNC',
+                history
+              });
+            }
+          }
+        } else {
+          SoundEngine.playTurnStart();
+          notify(`👋 ${packet.player.name} وارد اتاق شد!`, 'info');
+        }
+        break;
+      }
+      case 'REQUEST_PLAY_AGAIN': {
+        handleRestartGameHost();
         break;
       }
       case 'LEAVE': {
@@ -428,6 +616,9 @@
         break;
       }
       case 'DRAW_ACTION': {
+        if (state.gameRoom) {
+          state.gameRoom.recordDrawingAction(packet.action);
+        }
         // Broadcast drawing action to all other peers
         state.network.broadcast({
           type: 'DRAW_ACTION',
@@ -556,6 +747,73 @@
     }
   }
 
+  function handlePlayerTemporarilyDisconnected(playerId) {
+    if (!playerId) return;
+    if (state.isHost && state.gameRoom) {
+      const res = state.gameRoom.markPlayerDisconnected(playerId);
+      if (!res || !res.player) return;
+
+      const notice = {
+        sender: 'سیستم',
+        avatar: '⏳',
+        text: `ارتباط ${res.player.name} موقتاً قطع شد. مهلت اتصال مجدد: ۲۸ ثانیه.`,
+        isSystem: true
+      };
+      state.network.broadcast({ type: 'CHAT', ...notice });
+      renderChatMessage(notice);
+      notify(`⚠️ ارتباط ${res.player.name} موقتاً قطع شد. در حال انتظار برای اتصال مجدد...`, 'warning');
+
+      broadcastRoomState();
+      updateWaitingRoomUI();
+    }
+  }
+
+  function handleRestartGameHost() {
+    if (!state.isHost || !state.gameRoom) return;
+
+    if (typeof ConfettiEngine !== 'undefined') {
+      ConfettiEngine.stop();
+    }
+    if (state.canvas) {
+      state.canvas.clear(false);
+    }
+    closeAllDrawers();
+
+    state.gameRoom.restartGame();
+    const snap = state.gameRoom.getStateSnapshot();
+
+    state.network.broadcast({
+      type: 'PLAY_AGAIN',
+      state: snap
+    });
+
+    if (state.network && state.isHost) {
+      state.network.updateDiscoveryStatus('LOBBY', state.gameRoom.players.length);
+    }
+
+    showView('waiting');
+    updateWaitingRoomUI();
+    saveSession({ currentView: 'waiting' });
+    notify('🔄 بازی مجدد آغاز شد! همه بازیکنان به اتاق انتظار بازگشتند.', 'success');
+  }
+
+  function handlePlayAgainGuest(packet) {
+    if (typeof ConfettiEngine !== 'undefined') {
+      ConfettiEngine.stop();
+    }
+    if (state.canvas) {
+      state.canvas.clear(false);
+    }
+    closeAllDrawers();
+
+    showView('waiting');
+    if (packet && packet.state) {
+      handleSyncRoomState(packet.state);
+    }
+    saveSession({ currentView: 'waiting' });
+    notify('🔄 بازی مجدد آغاز شد! به اتاق انتظار بازگشتید.', 'info');
+  }
+
   function broadcastRoomState() {
     if (!state.isHost || !state.gameRoom) return;
     const snap = state.gameRoom.getStateSnapshot();
@@ -585,6 +843,8 @@
     setupNetwork(true);
     state.network.initHost(state.roomCode, hostPlayer);
 
+    saveSession({ roomCode: state.roomCode, isHost: true, currentView: 'waiting' });
+
     updateWaitingRoomUI();
     showView('waiting');
     SoundEngine.playTurnStart();
@@ -612,6 +872,8 @@
 
     setupNetwork(false);
     state.network.initGuest(cleanCode, guestPlayer);
+
+    saveSession({ roomCode: cleanCode, isHost: false, currentView: 'waiting' });
 
     els.displayRoomCode.textContent = cleanCode;
     els.hostControls.style.display = 'none';
@@ -672,10 +934,13 @@
       slot.className = 'player-slot' + (p ? ' filled' : ' empty');
 
       if (p) {
+        const isDisc = p.connected === false;
+        const badgeText = isDisc ? 'قطع ارتباط ⏳' : (p.isHost ? 'میزبان' : (p.isBot ? 'ربات' : 'آماده'));
+        const badgeStyle = isDisc ? 'style="background: rgba(239, 68, 68, 0.2); color: #f87171;"' : '';
         slot.innerHTML = `
           <div class="slot-avatar">${escapeHtml(p.avatar)}</div>
           <div class="slot-name">${escapeHtml(p.name)} ${p.isHost ? '👑' : ''}</div>
-          <div class="slot-badge">${p.isHost ? 'میزبان' : (p.isBot ? 'ربات' : 'آماده')}</div>
+          <div class="slot-badge" ${badgeStyle}>${badgeText}</div>
         `;
       } else {
         slot.innerHTML = `
@@ -702,7 +967,15 @@
     if (inActiveGame && state.currentView !== 'game') {
       showView('game');
     } else if (roomState.status === 'LOBBY' && state.currentView !== 'waiting' && state.currentView !== 'lobby') {
+      if (typeof ConfettiEngine !== 'undefined') ConfettiEngine.stop();
       showView('waiting');
+    }
+
+    saveSession({ roomCode: roomState.roomCode, currentView: state.currentView });
+
+    // Catch up canvas history for guest or reconnecting player
+    if (inActiveGame && state.canvas && Array.isArray(roomState.canvasHistory) && roomState.canvasHistory.length > 0 && (!state.canvas.history || state.canvas.history.length === 0)) {
+      state.canvas.applyRemoteAction({ type: 'FULL_SYNC', history: roomState.canvasHistory });
     }
 
     if (state.currentView === 'waiting') {
@@ -714,10 +987,13 @@
         slot.className = 'player-slot' + (p ? ' filled' : ' empty');
 
         if (p) {
+          const isDisc = p.connected === false;
+          const badgeText = isDisc ? 'قطع ارتباط ⏳' : (p.isHost ? 'میزبان' : (p.isBot ? 'ربات' : 'آماده'));
+          const badgeStyle = isDisc ? 'style="background: rgba(239, 68, 68, 0.2); color: #f87171;"' : '';
           slot.innerHTML = `
             <div class="slot-avatar">${escapeHtml(p.avatar)}</div>
             <div class="slot-name">${escapeHtml(p.name)} ${p.isHost ? '👑' : ''}</div>
-            <div class="slot-badge">${p.isHost ? 'میزبان' : (p.isBot ? 'ربات' : 'آماده')}</div>
+            <div class="slot-badge" ${badgeStyle}>${badgeText}</div>
           `;
         } else {
           slot.innerHTML = `
@@ -1160,14 +1436,19 @@
       sorted.forEach((p, idx) => {
         const isDrawer = drawer && drawer.id === p.id;
         const isMe = p.id === state.myPlayerId;
+        const isDisc = p.connected === false;
         const item = document.createElement('div');
-        item.className = 'score-item' + (isMe ? ' is-me' : '') + (p.guessedThisRound ? ' guessed' : '');
+        item.className = 'score-item' + (isMe ? ' is-me' : '') + (p.guessedThisRound ? ' guessed' : '') + (isDisc ? ' disconnected' : '');
+
+        const statusTag = isDisc
+          ? '<span style="color: #f87171; font-size: 0.75rem;">(قطع ارتباط ⏳)</span>'
+          : (isDrawer ? '✏️' : (p.guessedThisRound ? '✅' : ''));
 
         item.innerHTML = `
           <div class="score-rank">#${idx + 1}</div>
           <div class="score-avatar">${escapeHtml(p.avatar)}</div>
           <div class="score-details">
-            <div class="score-name">${escapeHtml(p.name)} ${isDrawer ? '✏️' : (p.guessedThisRound ? '✅' : '')}</div>
+            <div class="score-name">${escapeHtml(p.name)} ${statusTag}</div>
             <div class="score-pts">${p.score} امتیاز</div>
           </div>
         `;
@@ -1185,13 +1466,17 @@
       (players || []).forEach(p => {
         const isDrawer = drawer && drawer.id === p.id;
         const isMe = p.id === state.myPlayerId;
+        const isDisc = p.connected === false;
         const chip = document.createElement('div');
-        chip.className = 'ribbon-chip' + (isMe ? ' is-me' : '') + (isDrawer ? ' is-drawer' : '') + (p.guessedThisRound ? ' guessed' : '');
+        chip.className = 'ribbon-chip' + (isMe ? ' is-me' : '') + (isDrawer ? ' is-drawer' : '') + (p.guessedThisRound ? ' guessed' : '') + (isDisc ? ' disconnected' : '');
+        const statusIcon = isDisc
+          ? '<span style="color: #f87171;" title="در انتظار اتصال مجدد">⏳</span>'
+          : (isDrawer ? '<span>✏️</span>' : (p.guessedThisRound ? '<span>✅</span>' : ''));
         chip.innerHTML = `
           <span class="ribbon-avatar">${escapeHtml(p.avatar)}</span>
           <span class="ribbon-name">${escapeHtml(p.name)}</span>
           <span class="ribbon-score">${p.score}</span>
-          ${isDrawer ? '<span>✏️</span>' : (p.guessedThisRound ? '<span>✅</span>' : '')}
+          ${statusIcon}
         `;
         els.mobilePlayerRibbon.appendChild(chip);
       });
@@ -1350,6 +1635,9 @@
         if (state.isDrawer) {
           SoundEngine.playDrawSwoosh();
           if (state.isHost) {
+            if (state.gameRoom) {
+              state.gameRoom.recordDrawingAction(action);
+            }
             state.network.broadcast({ type: 'DRAW_ACTION', action });
           } else {
             state.network.sendToHost({ type: 'DRAW_ACTION', action });
@@ -1477,7 +1765,15 @@
     els.btnAddBot.addEventListener('click', addBotPlayer);
     els.btnStartGame.addEventListener('click', startGame);
 
+    if (els.btnRefreshRooms) {
+      els.btnRefreshRooms.addEventListener('click', () => {
+        renderActiveRoomsList(NetworkEngine.NetworkManager.getActiveRooms());
+        notify('لیست اتاق‌های فعال به‌روزرسانی شد.', 'info');
+      });
+    }
+
     els.btnLeaveWaiting.addEventListener('click', () => {
+      clearSession();
       if (state.network) state.network.destroy();
       showView('lobby');
     });
@@ -1522,6 +1818,7 @@
 
     els.btnLeaveGame.addEventListener('click', () => {
       if (confirm('آیا مطمئن هستید که می‌خواهید از بازی خارج شوید؟')) {
+        clearSession();
         closeAllDrawers();
         if (state.network) state.network.destroy();
         showView('lobby');
@@ -1536,17 +1833,18 @@
     // Game Over
     els.btnPlayAgain.addEventListener('click', () => {
       closeAllDrawers();
-      if (state.isHost && state.gameRoom) {
-        state.gameRoom.restartGame();
-        broadcastRoomState();
-        showView('waiting');
-        updateWaitingRoomUI();
+      if (state.isHost) {
+        handleRestartGameHost();
       } else {
-        showView('waiting');
+        if (state.network) {
+          state.network.sendToHost({ type: 'REQUEST_PLAY_AGAIN', playerId: state.myPlayerId });
+          notify('درخواست بازی مجدد برای میزبان ارسال شد...', 'info');
+        }
       }
     });
 
     els.btnBackLobby.addEventListener('click', () => {
+      clearSession();
       closeAllDrawers();
       if (state.network) state.network.destroy();
       showView('lobby');
@@ -1598,14 +1896,47 @@
     });
   }
 
+  function checkSessionResume() {
+    const sess = getSession();
+    if (sess && sess.roomCode && sess.playerId === state.myPlayerId) {
+      console.log('Resuming session for room:', sess.roomCode);
+      if (sess.name) {
+        state.myName = sess.name;
+        if (els.playerNameInput) els.playerNameInput.value = sess.name;
+      }
+      if (sess.avatar) state.myAvatar = sess.avatar;
+
+      if (sess.isHost) {
+        state.isHost = true;
+        state.roomCode = sess.roomCode;
+        const hostPlayer = { id: state.myPlayerId, name: state.myName, avatar: state.myAvatar, isHost: true };
+        state.gameRoom = new RoomLogic.GameRoom(sess.roomCode, hostPlayer);
+        setupNetwork(true);
+        state.network.initHost(sess.roomCode, hostPlayer);
+        updateWaitingRoomUI();
+        showView('waiting');
+        notify(`نشست میزبانی در اتاق ${sess.roomCode} بازیابی شد.`, 'success');
+      } else {
+        joinRoom(sess.roomCode);
+      }
+      return true;
+    }
+    return false;
+  }
+
   // --- App Initialization ---
   function init() {
     initElements();
     initProfile();
+    initRoomDiscovery();
     updateMuteButton();
     initCanvas();
     bindEvents();
-    showView('lobby');
+
+    const resumed = checkSessionResume();
+    if (!resumed) {
+      showView('lobby');
+    }
 
     // Register Service Worker for PWA
     if ('serviceWorker' in navigator && window.location.protocol.startsWith('http')) {

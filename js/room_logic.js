@@ -71,7 +71,9 @@
       const existing = this.players.find(p => p.id === playerInfo.id);
       if (existing) {
         existing.connected = true;
-        return { success: true, player: existing };
+        if (playerInfo.name && playerInfo.name.trim()) existing.name = playerInfo.name.trim();
+        if (playerInfo.avatar) existing.avatar = playerInfo.avatar;
+        return { success: true, player: existing, isReconnect: true };
       }
 
       const isFirst = this.players.length === 0;
@@ -90,6 +92,45 @@
 
       this.players.push(player);
       return { success: true, player };
+    }
+
+    /**
+     * Mark player temporarily disconnected (network spike, tab sleep, etc.)
+     * Preserves player slot and score intact without terminating game.
+     */
+    markPlayerDisconnected(playerId) {
+      const player = this.players.find(p => p.id === playerId);
+      if (!player) return null;
+      player.connected = false;
+      const drawer = this.getDrawer();
+      return {
+        player,
+        wasDrawer: drawer ? drawer.id === playerId : false,
+        roomStatus: this.status
+      };
+    }
+
+    /**
+     * Record a drawing stroke / action for instant canvas replay on reconnect
+     */
+    recordDrawingAction(action) {
+      if (!action) return;
+      if (action.type === 'CLEAR') {
+        this.canvasHistory = [{ type: 'CLEAR' }];
+      } else if (action.type === 'UNDO') {
+        if (this.canvasHistory.length > 0) {
+          this.canvasHistory.pop();
+        }
+      } else if (action.type === 'STROKE' || action.type === 'FILL') {
+        this.canvasHistory.push(action);
+        if (this.canvasHistory.length > 60) {
+          this.canvasHistory.shift();
+        }
+      }
+    }
+
+    getCanvasHistory() {
+      return Array.isArray(this.canvasHistory) ? [...this.canvasHistory] : [];
     }
 
     removePlayer(playerId) {
@@ -410,7 +451,8 @@
         })),
         maskedWord: this.currentWord ? WordBank.getMaskedDisplay(this.currentWord.word, this.revealedIndices) : null,
         wordCategory: this.currentWord ? this.currentWord.category : null,
-        wordDifficulty: this.currentWord ? this.currentWord.difficulty : null
+        wordDifficulty: this.currentWord ? this.currentWord.difficulty : null,
+        canvasHistory: this.getCanvasHistory()
       };
     }
   }
