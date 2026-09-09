@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>نقاشباشی (Naghash Bashi) - بازی آنلاین حدس نقاشی</title>
+  
+  <!-- PWA & Mobile Meta -->
+  <meta name="description" content="بازی آنلاین چندنفره و مهیج حدس نقاشی (Doodle Kong / Skribbl) به زبان فارسی با قابلیت بازی در اتاق‌های ۲ تا ۶ نفره و نسخه PWA">
+  <meta name="theme-color" content="#f59e0b">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="نقاشباشی">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/svg+xml" href="assets/icon-192.svg">
+  <link rel="apple-touch-icon" href="assets/icon-192.svg">
+
+  <!-- Vazirmatn Persian Font -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700;900&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <!-- Confetti Canvas overlay -->
+  <canvas id="confetti-canvas"></canvas>
+
+  <div id="app-container">
+    <!-- Main Top Header -->
+    <header class="main-header">
+      <div class="logo-area">
+        <span class="logo-icon">🎨</span>
+        <div class="logo-text-group">
+          <h1 class="logo-title">نقاشباشی</h1>
+          <span class="logo-subtitle">بازی آنلاین حدس نقاشی</span>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button id="btn-install-pwa" class="header-btn pwa-btn" style="display: none;" title="نصب اپلیکیشن PWA">
+          📲 نصب برنامه
+        </button>
+        <button id="btn-mute" class="header-btn mute-btn" title="قطع/وصل صدا">
+          🔊
+        </button>
+      </div>
+    </header>
+
+    <!-- 1. LOBBY SCREEN -->
+    <section id="screen-lobby" class="game-screen active">
+      <div class="lobby-card">
+        <!-- Player Setup -->
+        <div class="profile-card">
+          <h2 class="card-title">پروفایل بازیکن</h2>
+          <div class="input-group">
+            <label for="player-name-input">نام یا نام مستعار شما:</label>
+            <input type="text" id="player-name-input" maxlength="20" placeholder="مثال: نقاش ماهر" autocomplete="off">
+            <span id="name-error" class="error-msg" style="display: none;"></span>
+          </div>
+
+          <div class="avatar-selection-group">
+            <label>انتخاب آواتار:</label>
+            <div id="avatar-grid" class="avatar-grid"></div>
+          </div>
+        </div>
+
+        <!-- Action Cards Grid -->
+        <div class="lobby-actions-grid">
+          <!-- Create Room -->
+          <div class="action-card primary-card">
+            <div class="action-icon">🏠</div>
+            <h3>ایجاد اتاق جدید</h3>
+            <p>یک اتاق با کد اختصاصی بسازید و دوستانتان را دعوت کنید (۲ تا ۶ نفر).</p>
+            <button id="btn-create-room" class="btn btn-primary btn-block">
+              ✨ ایجاد اتاق مسابقه
+            </button>
+          </div>
+
+          <!-- Join Room -->
+          <div class="action-card secondary-card">
+            <div class="action-icon">🔑</div>
+            <h3>پیوستن به اتاق</h3>
+            <p>کد ۶ رقمی اتاق دوستتان را وارد کنید و وارد رقابت شوید.</p>
+            <div class="join-input-wrap">
+              <input type="text" id="room-code-input" placeholder="مثال: NB-256" maxlength="8" autocomplete="off">
+              <button id="btn-join-room" class="btn btn-secondary">
+                ورود 🚀
+              </button>
+            </div>
+          </div>
+
+          <!-- Practice with Bots -->
+          <div class="action-card solo-card">
+            <div class="action-icon">🤖</div>
+            <h3>بازی تمرینی با بات‌ها</h3>
+            <p>بدون نیاز به دوستان، فوراً با ۳ هوش مصنوعی بامزه بازی کنید و لذت ببرید!</p>
+            <button id="btn-practice-bots" class="btn btn-accent btn-block">
+              🎯 شروع تمرین انفرادی
+            </button>
+          </div>
+        </div>
+
+        <!-- Footer Info Badges -->
+        <div class="lobby-badges">
+          <span class="badge-item">🌐 اتصال P2P بدون نیاز به سرور (GitHub Pages Ready)</span>
+          <span class="badge-item">⚡ پشتیبانی کامل از تاچ موبایل و PWA</span>
+          <span class="badge-item">🎨 بیش از ۲۱۰ کلمه متنوع و طبقه‌بندی‌شده فارسی</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. WAITING ROOM SCREEN -->
+    <section id="screen-waiting" class="game-screen">
+      <div class="waiting-card">
+        <div class="room-code-banner">
+          <span class="banner-label">کد اختصاصی اتاق:</span>
+          <div class="code-box">
+            <span id="display-room-code" class="code-text">NB-000</span>
+            <button id="btn-copy-code" class="btn-icon" title="کپی کد اتاق">📋 کپی کد</button>
+            <button id="btn-copy-link" class="btn-icon" title="کپی لینک مستقیم دعوت">🔗 کپی لینک دعوت</button>
+          </div>
+          <span class="capacity-info">ظرفیت اتاق: <strong id="waiting-count">۱ از ۶ نفر</strong></span>
+        </div>
+
+        <!-- 6 Player Slots -->
+        <div class="slots-container">
+          <h3 class="section-title">بازیکنان حاضر در اتاق</h3>
+          <div id="waiting-player-slots" class="slots-grid"></div>
+        </div>
+
+        <!-- Host Controls -->
+        <div id="host-controls" class="host-panel">
+          <div class="host-settings-row">
+            <label for="rounds-select">تعداد دورهای بازی:</label>
+            <select id="rounds-select" class="custom-select">
+              <option value="2">۲ دور (سریع)</option>
+              <option value="3" selected>۳ دور (استاندارد)</option>
+              <option value="5">۵ دور (طولانی و مهیج)</option>
+            </select>
+          </div>
+          <div class="host-buttons-row">
+            <button id="btn-add-bot" class="btn btn-secondary">
+              ➕ افزودن بازیکن بات 🤖
+            </button>
+            <button id="btn-start-game" class="btn btn-success btn-large" disabled>
+              🏁 شروع مسابقه نقاشباشی!
+            </button>
+          </div>
+        </div>
+
+        <div class="waiting-footer">
+          <button id="btn-leave-waiting" class="btn btn-outline">
+            🚪 خروج از اتاق
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. MAIN GAME SCREEN -->
+    <section id="screen-game" class="game-screen">
+      <!-- Game Top Bar -->
+      <div class="game-top-bar">
+        <div class="round-badge-wrap">
+          <span id="round-indicator" class="round-badge">دور ۱ از ۳</span>
+        </div>
+
+        <div class="word-info-wrap">
+          <div id="word-display" class="masked-word">_ _ _ _</div>
+          <span id="word-category-badge" class="category-badge">دسته‌بندی: خوراکی‌ها</span>
+        </div>
+
+        <div class="timer-wrap">
+          <div id="turn-timer" class="timer-pill">
+            ⏱️ <span id="timer-text">۶۰</span>
+          </div>
+        </div>
+
+        <button id="btn-leave-game" class="btn-icon leave-icon" title="خروج از بازی">🚪</button>
+      </div>
+
+      <!-- Game Arena Grid -->
+      <div class="game-arena">
+        <!-- Sidebar: Scoreboard -->
+        <aside class="sidebar-scoreboard">
+          <h4 class="scoreboard-title">🏆 جدول امتیازات</h4>
+          <div id="scoreboard-list" class="score-items-wrap"></div>
+        </aside>
+
+        <!-- Center: Drawing Canvas -->
+        <main class="canvas-area">
+          <div class="canvas-container">
+            <canvas id="drawing-canvas"></canvas>
+
+            <!-- Word Choice Overlay (Drawer Only) -->
+            <div id="overlay-word-choice" class="modal-overlay">
+              <div class="word-choice-modal">
+                <div class="modal-icon">🎨</div>
+                <h3>یکی از کلمات زیر را برای نقاشی انتخاب کنید:</h3>
+                <div class="word-timer-badge">⏱️ زمان باقی‌مانده برای انتخاب: <span id="word-choice-timer">۱۵</span> ثانیه</div>
+                <div id="word-choices-container" class="word-choices-grid"></div>
+              </div>
+            </div>
+
+            <!-- Waiting for Drawer Choice Overlay (Guessers Only) -->
+            <div id="overlay-waiting-choice" class="modal-overlay">
+              <div class="waiting-choice-modal">
+                <div class="spinner-brush">🖌️</div>
+                <h3>نقاش در حال انتخاب کلمه است...</h3>
+                <p>آماده حدس زدن باشید!</p>
+              </div>
+            </div>
+
+            <!-- Round End Overlay -->
+            <div id="overlay-round-end" class="modal-overlay">
+              <div class="round-end-modal">
+                <div class="modal-icon">🔔</div>
+                <h3>زمان این دور به پایان رسید!</h3>
+                <div class="revealed-word-box">
+                  کلمه صحیح: <strong id="round-end-word">---</strong>
+                </div>
+                <div id="round-end-scores" class="round-scores-list"></div>
+                <p class="next-turn-notice">آماده‌سازی برای دور بعد...</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Drawing Toolbar (Only active for drawer) -->
+          <div id="drawing-toolbar" class="toolbar-wrap" style="display: none;">
+            <!-- Tools -->
+            <div class="tool-group">
+              <button class="tool-btn active" data-tool="pencil" title="مداد نقاشی">✏️</button>
+              <button class="tool-btn" data-tool="eraser" title="پاک‌کن">🧹</button>
+              <button class="tool-btn" data-tool="bucket" title="سطل رنگ (پر کردن)">🪣</button>
+              <button id="tool-undo" class="tool-btn" title="بازگشت (Undo)">↩️</button>
+              <button id="tool-clear" class="tool-btn danger-tool" title="پاک کردن بوم">🗑️</button>
+            </div>
+
+            <!-- Brush Sizes -->
+            <div class="tool-group size-group">
+              <button class="brush-size-btn" data-size="thin" title="قلم نازک">
+                <span class="dot dot-thin"></span>
+              </button>
+              <button class="brush-size-btn active" data-size="medium" title="قلم متوسط">
+                <span class="dot dot-medium"></span>
+              </button>
+              <button class="brush-size-btn" data-size="thick" title="قلم ضخیم">
+                <span class="dot dot-thick"></span>
+              </button>
+              <button class="brush-size-btn" data-size="jumbo" title="قلم خیلی درشت">
+                <span class="dot dot-jumbo"></span>
+              </button>
+            </div>
+
+            <!-- Palette -->
+            <div class="tool-group palette-group">
+              <button class="palette-color active" data-color="#1e293b" style="background-color: #1e293b;" title="مشکی"></button>
+              <button class="palette-color" data-color="#ffffff" style="background-color: #ffffff; border: 1px solid #94a3b8;" title="سفید"></button>
+              <button class="palette-color" data-color="#64748b" style="background-color: #64748b;" title="خاکستری"></button>
+              <button class="palette-color" data-color="#ef4444" style="background-color: #ef4444;" title="قرمز"></button>
+              <button class="palette-color" data-color="#f97316" style="background-color: #f97316;" title="نارنجی"></button>
+              <button class="palette-color" data-color="#facc15" style="background-color: #facc15;" title="زرد"></button>
+              <button class="palette-color" data-color="#22c55e" style="background-color: #22c55e;" title="سبز"></button>
+              <button class="palette-color" data-color="#06b6d4" style="background-color: #06b6d4;" title="فیروزه‌ای"></button>
+              <button class="palette-color" data-color="#3b82f6" style="background-color: #3b82f6;" title="آبی"></button>
+              <button class="palette-color" data-color="#a855f7" style="background-color: #a855f7;" title="بنفش"></button>
+              <button class="palette-color" data-color="#ec4899" style="background-color: #ec4899;" title="صورتی"></button>
+              <button class="palette-color" data-color="#78350f" style="background-color: #78350f;" title="قهوه‌ای"></button>
+            </div>
+          </div>
+        </main>
+
+        <!-- Right: Live Chat & Guess Stream -->
+        <aside class="sidebar-chat">
+          <div class="chat-header">
+            <h4>💬 گفت‌وگو و حدس‌ها</h4>
+          </div>
+          <div id="chat-messages" class="chat-stream"></div>
+          <form id="chat-form" class="chat-form">
+            <input type="text" id="chat-input" placeholder="حدس خود را اینجا بنویسید..." autocomplete="off">
+            <button type="submit" id="chat-send-btn" class="btn btn-chat">ارسال</button>
+          </form>
+        </aside>
+      </div>
+    </section>
+
+    <!-- 4. PODIUM & GAME OVER SCREEN -->
+    <section id="screen-gameover" class="game-screen">
+      <div class="gameover-card">
+        <h2 class="gameover-title">🎉 مسابقه نقاشباشی به پایان رسید! 🎉</h2>
+
+        <!-- 3D Podium -->
+        <div id="podium-container" class="podium-wrap"></div>
+
+        <!-- Leaderboard Table -->
+        <div class="gameover-table-wrap">
+          <h3>رتبه‌بندی نهایی تمام بازیکنان</h3>
+          <div id="game-over-scores" class="game-over-list"></div>
+        </div>
+
+        <div class="gameover-actions">
+          <button id="btn-play-again" class="btn btn-success btn-large">
+            🔄 بازی مجدد
+          </button>
+          <button id="btn-back-lobby" class="btn btn-outline">
+            🏠 بازگشت به لابی
+          </button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- PeerJS for WebRTC P2P Room Networking (GitHub Pages serverless) -->
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+
+  <!-- Application Logic Modules -->
+  <script src="js/profanity.js"></script>
+  <script src="js/words.js"></script>
+  <script src="js/room_logic.js"></script>
+  <script src="js/canvas.js"></script>
+  <script src="js/network.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/bot.js"></script>
+  <script src="js/confetti.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

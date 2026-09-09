@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192">
+  <defs>
+    <radialGradient id="bgGrad" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#1e293b"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </radialGradient>
+    <linearGradient id="paletteGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fef3c7"/>
+      <stop offset="100%" stop-color="#f59e0b"/>
+    </linearGradient>
+    <linearGradient id="brushWood" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#d97706"/>
+      <stop offset="100%" stop-color="#78350f"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="192" height="192" rx="42" fill="url(#bgGrad)" stroke="#f59e0b" stroke-width="4"/>
+
+  <!-- Artist Palette -->
+  <path d="M96 35 C52 35 28 62 28 105 C28 145 60 162 90 162 C108 162 116 150 128 150 C140 150 148 160 160 148 C172 136 170 115 170 95 C170 52 140 35 96 35 Z" fill="url(#paletteGrad)" stroke="#d97706" stroke-width="3"/>
+
+  <!-- Palette Paint Blobs -->
+  <circle cx="62" cy="68" r="11" fill="#ef4444"/>
+  <circle cx="95" cy="58" r="11" fill="#3b82f6"/>
+  <circle cx="128" cy="70" r="11" fill="#10b981"/>
+  <circle cx="145" cy="105" r="11" fill="#8b5cf6"/>
+  <circle cx="70" cy="105" r="11" fill="#ec4899"/>
+  <!-- Thumb Hole -->
+  <circle cx="118" cy="126" r="14" fill="#0f172a" stroke="#d97706" stroke-width="2"/>
+
+  <!-- Paintbrush Crossing -->
+  <g transform="rotate(35 96 96)">
+    <rect x="91" y="25" width="10" height="110" rx="5" fill="url(#brushWood)"/>
+    <rect x="88" y="130" width="16" height="14" rx="2" fill="#94a3b8"/>
+    <!-- Brush Tip -->
+    <path d="M88 144 C88 144 96 168 96 168 C96 168 104 144 104 144 Z" fill="#3b82f6"/>
+  </g>
+</svg>

@@ -1,0 +1,1261 @@
+/**
+ * نقاشباشی (Naghash Bashi) - Main Application Controller
+ * Coordinates UI views, Canvas interactions, Web Audio sound effects,
+ * P2P WebRTC networking, Game Room state transitions, and Bot companions.
+ */
+
+(function () {
+  'use strict';
+
+  // Available avatars
+  const AVATARS = ['🎨', '🦁', '🐱', '🚀', '☕', '🤖', '🦊', '👑'];
+
+  // Global app state
+  const state = {
+    myPlayerId: 'p_' + Math.random().toString(36).substr(2, 9),
+    myName: '',
+    myAvatar: '🎨',
+    isHost: false,
+    roomCode: null,
+    totalRounds: 3,
+
+    gameRoom: null,       // If host, holds GameRoom instance
+    network: null,        // NetworkManager instance
+    canvas: null,         // DrawingCanvas instance
+    activeBots: [],       // Bot companions
+
+    currentView: 'lobby', // 'lobby', 'waiting', 'game', 'gameover'
+    isDrawer: false,
+    currentWord: null,
+    turnTimerInterval: null,
+    wordSelectionTimeout: null,
+    deferredPrompt: null
+  };
+
+  // DOM Elements
+  const els = {};
+
+  function initElements() {
+    // Views
+    els.screenLobby = document.getElementById('screen-lobby');
+    els.screenWaiting = document.getElementById('screen-waiting');
+    els.screenGame = document.getElementById('screen-game');
+    els.screenGameOver = document.getElementById('screen-gameover');
+
+    // Lobby
+    els.playerNameInput = document.getElementById('player-name-input');
+    els.nameError = document.getElementById('name-error');
+    els.avatarGrid = document.getElementById('avatar-grid');
+    els.btnCreateRoom = document.getElementById('btn-create-room');
+    els.roomCodeInput = document.getElementById('room-code-input');
+    els.btnJoinRoom = document.getElementById('btn-join-room');
+    els.btnPracticeBots = document.getElementById('btn-practice-bots');
+    els.installBtn = document.getElementById('btn-install-pwa');
+
+    // Waiting Room
+    els.displayRoomCode = document.getElementById('display-room-code');
+    els.btnCopyCode = document.getElementById('btn-copy-code');
+    els.btnCopyLink = document.getElementById('btn-copy-link');
+    els.waitingPlayerSlots = document.getElementById('waiting-player-slots');
+    els.waitingCount = document.getElementById('waiting-count');
+    els.hostControls = document.getElementById('host-controls');
+    els.roundsSelect = document.getElementById('rounds-select');
+    els.btnAddBot = document.getElementById('btn-add-bot');
+    els.btnStartGame = document.getElementById('btn-start-game');
+    els.btnLeaveWaiting = document.getElementById('btn-leave-waiting');
+
+    // Game Screen
+    els.roundIndicator = document.getElementById('round-indicator');
+    els.turnTimer = document.getElementById('turn-timer');
+    els.timerText = document.getElementById('timer-text');
+    els.wordDisplay = document.getElementById('word-display');
+    els.wordCategoryBadge = document.getElementById('word-category-badge');
+    els.btnMute = document.getElementById('btn-mute');
+    els.btnLeaveGame = document.getElementById('btn-leave-game');
+    els.scoreboardList = document.getElementById('scoreboard-list');
+
+    // Canvas & Tools
+    els.drawingCanvas = document.getElementById('drawing-canvas');
+    els.drawingToolbar = document.getElementById('drawing-toolbar');
+    els.paletteColors = document.querySelectorAll('.palette-color');
+    els.brushSizes = document.querySelectorAll('.brush-size-btn');
+    els.toolButtons = document.querySelectorAll('.tool-btn');
+    els.btnClear = document.getElementById('tool-clear');
+    els.btnUndo = document.getElementById('tool-undo');
+
+    // Chat
+    els.chatMessages = document.getElementById('chat-messages');
+    els.chatForm = document.getElementById('chat-form');
+    els.chatInput = document.getElementById('chat-input');
+    els.chatSendBtn = document.getElementById('chat-send-btn');
+
+    // Overlays
+    els.overlayWordChoice = document.getElementById('overlay-word-choice');
+    els.wordChoicesContainer = document.getElementById('word-choices-container');
+    els.wordChoiceTimer = document.getElementById('word-choice-timer');
+    els.overlayWaitingChoice = document.getElementById('overlay-waiting-choice');
+    els.overlayRoundEnd = document.getElementById('overlay-round-end');
+    els.roundEndWord = document.getElementById('round-end-word');
+    els.roundEndScores = document.getElementById('round-end-scores');
+
+    // Game Over
+    els.podiumContainer = document.getElementById('podium-container');
+    els.gameOverScores = document.getElementById('game-over-scores');
+    els.btnPlayAgain = document.getElementById('btn-play-again');
+    els.btnBackLobby = document.getElementById('btn-back-lobby');
+  }
+
+  function showView(viewName) {
+    state.currentView = viewName;
+    els.screenLobby.classList.toggle('active', viewName === 'lobby');
+    els.screenWaiting.classList.toggle('active', viewName === 'waiting');
+    els.screenGame.classList.toggle('active', viewName === 'game');
+    els.screenGameOver.classList.toggle('active', viewName === 'gameover');
+
+    if (viewName === 'game' && state.canvas) {
+      setTimeout(() => {
+        state.canvas.setupCanvas();
+      }, 50);
+    }
+  }
+
+  // --- Profile & Avatars ---
+  function initProfile() {
+    const savedName = localStorage.getItem('naghash_player_name');
+    const savedAvatar = localStorage.getItem('naghash_player_avatar');
+
+    if (savedName) {
+      state.myName = savedName;
+      els.playerNameInput.value = savedName;
+    } else {
+      const defaultNames = ['نقاش ماهر', 'استاد قلم‌مو', 'هنرمند خلاق', 'پیکاسوی کوچک'];
+      state.myName = defaultNames[Math.floor(Math.random() * defaultNames.length)];
+      els.playerNameInput.value = state.myName;
+    }
+
+    if (savedAvatar && AVATARS.includes(savedAvatar)) {
+      state.myAvatar = savedAvatar;
+    }
+
+    renderAvatarPicker();
+
+    // Check URL query param: ?room=NB-123
+    const urlParams = new URLSearchParams(window.location.search);
+    const roomFromUrl = urlParams.get('room');
+    if (roomFromUrl) {
+      els.roomCodeInput.value = roomFromUrl.toUpperCase();
+      notify('کد اتاق از لینک دریافت شد! دکمه ورود به بازی را لمس کنید.', 'info');
+    }
+  }
+
+  function renderAvatarPicker() {
+    els.avatarGrid.innerHTML = '';
+    AVATARS.forEach((av) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'avatar-choice-btn' + (av === state.myAvatar ? ' selected' : '');
+      btn.textContent = av;
+      btn.setAttribute('aria-label', `انتخاب آواتار ${av}`);
+      btn.addEventListener('click', () => {
+        state.myAvatar = av;
+        localStorage.setItem('naghash_player_avatar', av);
+        renderAvatarPicker();
+      });
+      els.avatarGrid.appendChild(btn);
+    });
+  }
+
+  function validatePlayerName() {
+    const raw = els.playerNameInput.value.trim();
+    if (!raw) {
+      els.nameError.textContent = 'لطفاً نام خود را وارد کنید.';
+      els.nameError.style.display = 'block';
+      return false;
+    }
+
+    if (typeof ProfanityFilter !== 'undefined' && typeof ProfanityFilter.validateName === 'function') {
+      const check = ProfanityFilter.validateName(raw);
+      if (!check.isValid) {
+        els.nameError.textContent = check.reason || 'نام وارد شده غیرمجاز است.';
+        els.nameError.style.display = 'block';
+        return false;
+      }
+    }
+
+    els.nameError.style.display = 'none';
+    state.myName = raw;
+    localStorage.setItem('naghash_player_name', raw);
+    return true;
+  }
+
+  // --- Audio Mute Button ---
+  function updateMuteButton() {
+    const isMuted = SoundEngine.getMuted();
+    els.btnMute.textContent = isMuted ? '🔇' : '🔊';
+    els.btnMute.setAttribute('title', isMuted ? 'صدای بازی قطع است' : 'صدای بازی وصل است');
+  }
+
+  // --- Network Initialization ---
+  function setupNetwork(isHost) {
+    if (state.network) {
+      state.network.destroy();
+    }
+
+    state.network = new NetworkEngine.NetworkManager({
+      onConnected: (peerId) => {
+        console.log('Network connected:', peerId);
+      },
+      onPlayerJoined: (player) => {
+        SoundEngine.playTurnStart();
+        notify(`👋 ${player.name} به اتاق پیوست!`, 'info');
+      },
+      onPlayerLeft: (playerId) => {
+        handlePlayerLeft(playerId);
+      },
+      onPlayerDisconnected: (playerId) => {
+        handlePlayerLeft(playerId);
+      },
+      onRoomState: (roomState) => {
+        handleSyncRoomState(roomState);
+      },
+      onDrawAction: (action) => {
+        if (!state.isDrawer && state.canvas) {
+          state.canvas.applyRemoteAction(action);
+          SoundEngine.playDrawSwoosh();
+        }
+      },
+      onChatMessage: (msg) => {
+        renderChatMessage(msg);
+      },
+      onWordChoices: (choices) => {
+        showWordChoiceModal(choices);
+      },
+      onRoundStart: (data) => {
+        handleRoundStart(data);
+      },
+      onDrawerSecretWord: (data) => {
+        handleDrawerSecretWord(data);
+      },
+      onTick: (seconds, masked) => {
+        handleTick(seconds, masked);
+      },
+      onRoundEnd: (data) => {
+        handleRoundEnd(data);
+      },
+      onGameOver: (data) => {
+        handleGameOver(data);
+      },
+      onError: (err) => {
+        notify(err, 'error');
+      },
+      onHostReceivedPacket: ({ fromPeerId, packet }) => {
+        handleHostPacket(fromPeerId, packet);
+      }
+    });
+  }
+
+  // --- Host Packet Handling ---
+  function handleHostPacket(fromPeerId, packet) {
+    if (!state.isHost || !state.gameRoom) return;
+
+    switch (packet.type) {
+      case 'JOIN': {
+        const res = state.gameRoom.addPlayer({
+          id: packet.player.id,
+          name: packet.player.name,
+          avatar: packet.player.avatar
+        });
+
+        if (!res.success) {
+          state.network.sendToPeer(fromPeerId, {
+            type: 'REJECT',
+            message: res.message
+          });
+          return;
+        }
+
+        // Broadcast full state
+        broadcastRoomState();
+        SoundEngine.playTurnStart();
+        notify(`👋 ${packet.player.name} وارد اتاق شد!`, 'info');
+        break;
+      }
+      case 'LEAVE': {
+        handlePlayerLeft(packet.playerId || packet.senderId);
+        break;
+      }
+      case 'DRAW_ACTION': {
+        // Broadcast drawing action to all other peers
+        state.network.broadcast({
+          type: 'DRAW_ACTION',
+          action: packet.action
+        });
+        if (!state.isDrawer && state.canvas) {
+          state.canvas.applyRemoteAction(packet.action);
+          SoundEngine.playDrawSwoosh();
+        }
+        break;
+      }
+      case 'WORD_SELECTED': {
+        const result = state.gameRoom.selectWord(packet.word);
+        startDrawingPhaseHost(result);
+        break;
+      }
+      case 'GUESS': {
+        const res = state.gameRoom.submitGuess(packet.senderId, packet.text);
+        if (res.type === 'CORRECT') {
+          SoundEngine.playCorrectGuess();
+          const chatMsg = {
+            sender: 'سیستم',
+            avatar: '🎉',
+            text: `${res.player.name} کلمه را درست حدس زد! (+${res.points} امتیاز)`,
+            isSystem: true,
+            isCorrect: true
+          };
+          state.network.broadcast({ type: 'CHAT', ...chatMsg });
+          renderChatMessage(chatMsg);
+          broadcastRoomState();
+
+          if (res.allGuessed) {
+            handleRoundEndHost(res.turnEndData);
+          }
+        } else if (res.type === 'CLOSE') {
+          // Send hint only to sender
+          state.network.sendToPeer(fromPeerId, {
+            type: 'CHAT',
+            sender: 'سیستم',
+            avatar: '💡',
+            text: 'نزدیک بود! چند حرف بیشتر دقت کن...',
+            isSystem: true
+          });
+        } else if (res.type === 'DRAWER_SPOILER_BLOCKED') {
+          state.network.sendToPeer(fromPeerId, {
+            type: 'CHAT',
+            sender: 'سیستم',
+            avatar: '⚠️',
+            text: 'نقاش نمی‌تواند کلمه را در چت فاش کند!',
+            isSystem: true
+          });
+        } else if (res.type === 'ALREADY_GUESSED_SPOILER') {
+          state.network.sendToPeer(fromPeerId, {
+            type: 'CHAT',
+            sender: 'سیستم',
+            avatar: '🤫',
+            text: 'شما قبلاً حدس زده‌اید، لطفاً پاسخ را لو ندهید!',
+            isSystem: true
+          });
+        } else if (res.type === 'ALREADY_GUESSED') {
+          const chatMsg = {
+            sender: res.player.name,
+            avatar: res.player.avatar,
+            text: `[حدس زده] ${res.text}`
+          };
+          state.network.broadcast({ type: 'CHAT', ...chatMsg });
+          renderChatMessage(chatMsg);
+        } else if (res.type === 'CHAT') {
+          const chatMsg = {
+            sender: res.player.name,
+            avatar: res.player.avatar,
+            text: res.text
+          };
+          state.network.broadcast({ type: 'CHAT', ...chatMsg });
+          renderChatMessage(chatMsg);
+        }
+        break;
+      }
+    }
+  }
+
+  function handlePlayerLeft(playerId) {
+    if (!playerId) return;
+
+    if (state.isHost && state.gameRoom) {
+      const removed = state.gameRoom.removePlayer(playerId);
+      if (!removed) return;
+
+      notify(`👋 ${removed.name} از اتاق خارج شد.`, 'info');
+      const leaveNotice = {
+        sender: 'سیستم',
+        avatar: '👋',
+        text: `${removed.name} از بازی خارج شد.`,
+        isSystem: true
+      };
+      state.network.broadcast({ type: 'CHAT', ...leaveNotice });
+      renderChatMessage(leaveNotice);
+
+      if (removed.roomStatus === 'LOBBY' || state.gameRoom.players.length < RoomLogic.MIN_PLAYERS) {
+        state.activeBots.forEach(b => b.cancelActions());
+        clearInterval(state.turnTimerInterval);
+        notify('تعداد بازیکنان کافی نیست. بازی به اتاق انتظار منتقل شد.', 'info');
+        showView('waiting');
+        updateWaitingRoomUI();
+        broadcastRoomState();
+        return;
+      }
+
+      if (removed.drawerLeft) {
+        state.activeBots.forEach(b => b.cancelActions());
+        clearInterval(state.turnTimerInterval);
+        notify('نقاش از بازی خارج شد. نوبت به بازیکن بعدی منتقل می‌شود...', 'info');
+        if (removed.isGameOver) {
+          state.network.broadcast({ type: 'GAME_OVER', podium: removed.podium });
+          handleGameOver({ podium: removed.podium });
+        } else {
+          startWordSelectionPhaseHost();
+        }
+        return;
+      }
+
+      updateWaitingRoomUI();
+      broadcastRoomState();
+    } else {
+      notify('یک بازیکن از اتاق خارج شد.', 'info');
+    }
+  }
+
+  function broadcastRoomState() {
+    if (!state.isHost || !state.gameRoom) return;
+    const snap = state.gameRoom.getStateSnapshot();
+    state.network.broadcast({ type: 'ROOM_STATE', state: snap });
+    handleSyncRoomState(snap);
+  }
+
+  // --- Waiting Room / Lobby Operations ---
+  function createRoom() {
+    if (!validatePlayerName()) return;
+
+    state.isHost = true;
+    state.roomCode = NetworkEngine.NetworkManager.generateRoomCode();
+    state.activeBots = [];
+
+    const hostPlayer = {
+      id: state.myPlayerId,
+      name: state.myName,
+      avatar: state.myAvatar,
+      isHost: true
+    };
+
+    state.gameRoom = new RoomLogic.GameRoom(state.roomCode, hostPlayer, {
+      totalRounds: parseInt(els.roundsSelect.value, 10) || 3
+    });
+
+    setupNetwork(true);
+    state.network.initHost(state.roomCode, hostPlayer);
+
+    updateWaitingRoomUI();
+    showView('waiting');
+    SoundEngine.playTurnStart();
+    notify(`اتاق با کد ${state.roomCode} ایجاد شد!`, 'success');
+  }
+
+  function joinRoom(code) {
+    if (!validatePlayerName()) return;
+    const cleanCode = (code || els.roomCodeInput.value).trim().toUpperCase();
+
+    if (!cleanCode) {
+      notify('لطفاً کد اتاق را وارد کنید.', 'error');
+      return;
+    }
+
+    state.isHost = false;
+    state.roomCode = cleanCode;
+
+    const guestPlayer = {
+      id: state.myPlayerId,
+      name: state.myName,
+      avatar: state.myAvatar,
+      isHost: false
+    };
+
+    setupNetwork(false);
+    state.network.initGuest(cleanCode, guestPlayer);
+
+    els.displayRoomCode.textContent = cleanCode;
+    els.hostControls.style.display = 'none';
+    showView('waiting');
+    notify('در حال اتصال به اتاق...', 'info');
+  }
+
+  function startPracticeWithBots() {
+    if (!validatePlayerName()) return;
+    createRoom();
+
+    // Add 3 friendly bots
+    for (let i = 0; i < 3; i++) {
+      addBotPlayer();
+    }
+  }
+
+  function addBotPlayer() {
+    if (!state.isHost || !state.gameRoom) return;
+
+    if (state.gameRoom.players.length >= RoomLogic.MAX_PLAYERS) {
+      notify('ظرفیت اتاق تکمیل است (حداکثر ۶ نفر).', 'error');
+      return;
+    }
+
+    const existingNames = state.gameRoom.players.map(p => p.name);
+    const profile = BotEngine.getAvailableBotProfile(existingNames);
+    const botId = 'bot_' + Math.random().toString(36).substr(2, 7);
+
+    const bot = new BotEngine.BotPlayer(botId, profile);
+    state.activeBots.push(bot);
+
+    state.gameRoom.addPlayer({
+      id: bot.id,
+      name: bot.name,
+      avatar: bot.avatar,
+      isBot: true
+    });
+
+    broadcastRoomState();
+    SoundEngine.playTurnStart();
+    notify(`🤖 ${bot.name} به اتاق افزوده شد!`, 'info');
+  }
+
+  function updateWaitingRoomUI() {
+    els.displayRoomCode.textContent = state.roomCode || '---';
+    els.hostControls.style.display = state.isHost ? 'block' : 'none';
+
+    const players = state.gameRoom ? state.gameRoom.players : [];
+    els.waitingCount.textContent = `${players.length} از ۶ نفر`;
+
+    // Render 6 slots
+    els.waitingPlayerSlots.innerHTML = '';
+    for (let i = 0; i < RoomLogic.MAX_PLAYERS; i++) {
+      const p = players[i];
+      const slot = document.createElement('div');
+      slot.className = 'player-slot' + (p ? ' filled' : ' empty');
+
+      if (p) {
+        slot.innerHTML = `
+          <div class="slot-avatar">${p.avatar}</div>
+          <div class="slot-name">${p.name} ${p.isHost ? '👑' : ''}</div>
+          <div class="slot-badge">${p.isHost ? 'میزبان' : (p.isBot ? 'ربات' : 'آماده')}</div>
+        `;
+      } else {
+        slot.innerHTML = `
+          <div class="slot-empty-icon">➕</div>
+          <div class="slot-name">خالی</div>
+        `;
+      }
+      els.waitingPlayerSlots.appendChild(slot);
+    }
+
+    if (state.isHost) {
+      const canStart = players.length >= RoomLogic.MIN_PLAYERS;
+      els.btnStartGame.disabled = !canStart;
+      els.btnStartGame.title = canStart ? 'شروع بازی' : 'حداقل ۲ بازیکن نیاز است';
+      els.btnAddBot.disabled = players.length >= RoomLogic.MAX_PLAYERS;
+    }
+  }
+
+  function handleSyncRoomState(roomState) {
+    if (!roomState) return;
+
+    if (state.currentView === 'waiting') {
+      els.waitingCount.textContent = `${roomState.players.length} از ۶ نفر`;
+      els.waitingPlayerSlots.innerHTML = '';
+      for (let i = 0; i < RoomLogic.MAX_PLAYERS; i++) {
+        const p = roomState.players[i];
+        const slot = document.createElement('div');
+        slot.className = 'player-slot' + (p ? ' filled' : ' empty');
+
+        if (p) {
+          slot.innerHTML = `
+            <div class="slot-avatar">${p.avatar}</div>
+            <div class="slot-name">${p.name} ${p.isHost ? '👑' : ''}</div>
+            <div class="slot-badge">${p.isHost ? 'میزبان' : (p.isBot ? 'ربات' : 'آماده')}</div>
+          `;
+        } else {
+          slot.innerHTML = `
+            <div class="slot-empty-icon">➕</div>
+            <div class="slot-name">خالی</div>
+          `;
+        }
+        els.waitingPlayerSlots.appendChild(slot);
+      }
+    }
+
+    if (state.currentView === 'game') {
+      renderScoreboard(roomState.players, roomState.drawer);
+      els.roundIndicator.textContent = `دور ${roomState.currentRound} از ${roomState.totalRounds}`;
+
+      if (!state.isDrawer && roomState.maskedWord) {
+        els.wordDisplay.textContent = roomState.maskedWord;
+        if (roomState.wordCategory) {
+          els.wordCategoryBadge.textContent = `دسته‌بندی: ${roomState.wordCategory}`;
+          els.wordCategoryBadge.style.display = 'inline-block';
+        }
+      }
+    }
+  }
+
+  // --- Game State Flow ---
+  function startGame() {
+    if (!state.isHost || !state.gameRoom) return;
+
+    const res = state.gameRoom.startGame();
+    if (!res.success) {
+      notify(res.message, 'error');
+      return;
+    }
+
+    showView('game');
+    startWordSelectionPhaseHost();
+  }
+
+  function startWordSelectionPhaseHost() {
+    state.activeBots.forEach(b => b.cancelActions());
+    clearInterval(state.turnTimerInterval);
+
+    const data = state.gameRoom.startWordSelection();
+    const drawer = data.drawer;
+    state.isDrawer = (drawer.id === state.myPlayerId);
+
+    broadcastRoomState();
+
+    if (state.canvas) {
+      state.canvas.clear(false);
+      state.canvas.setInteractive(state.isDrawer);
+    }
+    els.drawingToolbar.style.display = state.isDrawer ? 'flex' : 'none';
+
+    if (drawer.isBot) {
+      // Bot drawer: auto selects random word after 1.5s
+      setTimeout(() => {
+        const choice = data.wordChoices[Math.floor(Math.random() * data.wordChoices.length)];
+        const result = state.gameRoom.selectWord(choice);
+        startDrawingPhaseHost(result);
+      }, 1500);
+      return;
+    }
+
+    if (state.isDrawer) {
+      showWordChoiceModal(data.wordChoices);
+    } else {
+      els.overlayWaitingChoice.classList.add('active');
+      state.network.sendToPeer(drawer.id, {
+        type: 'WORD_CHOICES',
+        choices: data.wordChoices
+      });
+    }
+
+    // Start 15s countdown on Host
+    clearInterval(state.turnTimerInterval);
+    state.turnTimerInterval = setInterval(() => {
+      const tickRes = state.gameRoom.tick();
+      if (tickRes && tickRes.event === 'WORD_AUTO_SELECTED') {
+        clearInterval(state.turnTimerInterval);
+        startDrawingPhaseHost(tickRes.data);
+      } else if (tickRes && tickRes.event === 'TICK') {
+        state.network.broadcast({ type: 'TICK', seconds: tickRes.seconds });
+        handleTick(tickRes.seconds);
+      }
+    }, 1000);
+  }
+
+  function showWordChoiceModal(choices) {
+    els.overlayWaitingChoice.classList.remove('active');
+    els.overlayWordChoice.classList.add('active');
+    if (els.wordChoiceTimer) {
+      els.wordChoiceTimer.textContent = '۱۵';
+    }
+    els.wordChoicesContainer.innerHTML = '';
+
+    SoundEngine.playTurnStart();
+
+    choices.forEach((c) => {
+      const card = document.createElement('button');
+      card.type = 'button';
+      card.className = `word-choice-card difficulty-${c.difficulty}`;
+
+      const diffLabel = c.difficulty === 'easy' ? 'آسان (۱۰۰ امتیاز)' : (c.difficulty === 'medium' ? 'متوسط (۲۵۰ امتیاز)' : 'سخت (۴۰۰ امتیاز)');
+      card.innerHTML = `
+        <div class="card-word">${c.word}</div>
+        <div class="card-category">${c.category}</div>
+        <div class="card-diff">${diffLabel}</div>
+      `;
+
+      card.addEventListener('click', () => {
+        els.overlayWordChoice.classList.remove('active');
+        if (state.isHost) {
+          const result = state.gameRoom.selectWord(c);
+          startDrawingPhaseHost(result);
+        } else {
+          state.network.sendToHost({ type: 'WORD_SELECTED', word: c });
+        }
+      });
+
+      els.wordChoicesContainer.appendChild(card);
+    });
+  }
+
+  function startDrawingPhaseHost(result) {
+    clearInterval(state.turnTimerInterval);
+    state.activeBots.forEach(b => b.cancelActions());
+
+    const drawer = state.gameRoom.getDrawer();
+
+    // 1. Broadcast to ALL GUESSERS (MASKED ONLY, NO SECRET WORD!)
+    state.network.broadcast({
+      type: 'ROUND_START',
+      drawerId: drawer.id,
+      drawerName: drawer.name,
+      masked: result.masked,
+      category: result.word.category,
+      difficulty: result.word.difficulty,
+      timerSeconds: result.timerSeconds
+    });
+
+    // 2. Send secret word to remote DRAWER only
+    if (drawer.id !== state.myPlayerId && !drawer.isBot) {
+      state.network.sendToPeer(drawer.id, {
+        type: 'DRAWER_SECRET_WORD',
+        drawerId: drawer.id,
+        wordObj: result.word,
+        timerSeconds: result.timerSeconds
+      });
+    }
+
+    // 3. Host handles round start locally
+    handleRoundStart({
+      drawerId: drawer.id,
+      drawerName: drawer.name,
+      wordObj: result.word,
+      masked: result.masked,
+      category: result.word.category,
+      difficulty: result.word.difficulty,
+      timerSeconds: result.timerSeconds
+    });
+
+    // If drawer is bot, schedule bot drawing actions
+    if (drawer && drawer.isBot) {
+      const bot = state.activeBots.find(b => b.id === drawer.id);
+      if (bot) {
+        bot.startDrawing(state.canvas, (action) => {
+          state.network.broadcast({ type: 'DRAW_ACTION', action });
+        });
+      }
+    }
+
+    // Schedule bot guesses for non-drawer bots
+    state.activeBots.forEach((bot) => {
+      if (bot.id !== drawer.id) {
+        bot.scheduleGuess(result.word.word, (botId, guessWord) => {
+          const res = state.gameRoom.submitGuess(botId, guessWord);
+          if (res.type === 'CORRECT') {
+            SoundEngine.playCorrectGuess();
+            const chatMsg = {
+              sender: 'سیستم',
+              avatar: '🎉',
+              text: `${res.player.name} کلمه را درست حدس زد! (+${res.points} امتیاز)`,
+              isSystem: true,
+              isCorrect: true
+            };
+            state.network.broadcast({ type: 'CHAT', ...chatMsg });
+            renderChatMessage(chatMsg);
+            broadcastRoomState();
+
+            if (res.allGuessed) {
+              handleRoundEndHost(res.turnEndData);
+            }
+          }
+        });
+      }
+    });
+
+    // 60s Host timer tick
+    state.turnTimerInterval = setInterval(() => {
+      const tickRes = state.gameRoom.tick();
+      if (!tickRes) return;
+
+      if (tickRes.event === 'TIME_UP') {
+        clearInterval(state.turnTimerInterval);
+        handleRoundEndHost(tickRes.data);
+      } else if (tickRes.event === 'TICK') {
+        state.network.broadcast({
+          type: 'TICK',
+          seconds: tickRes.seconds,
+          masked: tickRes.masked
+        });
+        handleTick(tickRes.seconds, tickRes.masked);
+      }
+    }, 1000);
+  }
+
+  function handleRoundStart(data) {
+    els.overlayWordChoice.classList.remove('active');
+    els.overlayWaitingChoice.classList.remove('active');
+    els.overlayRoundEnd.classList.remove('active');
+
+    state.isDrawer = (data.drawerId === state.myPlayerId);
+
+    if (state.canvas) {
+      state.canvas.clear(false);
+      state.canvas.setInteractive(state.isDrawer);
+    }
+
+    els.drawingToolbar.style.display = state.isDrawer ? 'flex' : 'none';
+
+    if (state.isDrawer) {
+      if (data.wordObj) {
+        state.currentWord = data.wordObj;
+        els.wordDisplay.textContent = `کلمه شما برای نقاشی: ${state.currentWord.word} ✏️`;
+        els.wordCategoryBadge.textContent = `دسته‌بندی: ${state.currentWord.category}`;
+        els.wordCategoryBadge.style.display = 'inline-block';
+      }
+      els.chatInput.disabled = true;
+      els.chatInput.placeholder = 'شما در حال نقاشی هستید 🎨';
+      els.chatSendBtn.disabled = true;
+    } else {
+      state.currentWord = null;
+      els.wordDisplay.textContent = data.masked || '---';
+      els.wordCategoryBadge.textContent = `دسته‌بندی: ${data.category || ''}`;
+      els.wordCategoryBadge.style.display = 'inline-block';
+      els.chatInput.disabled = false;
+      els.chatInput.placeholder = 'حدس خود را تایپ و ارسال کنید...';
+      els.chatSendBtn.disabled = false;
+    }
+
+    SoundEngine.playTurnStart();
+    renderScoreboard(state.gameRoom ? state.gameRoom.players : [], { id: data.drawerId, name: data.drawerName });
+  }
+
+  function handleDrawerSecretWord(data) {
+    state.isDrawer = true;
+    state.currentWord = data.wordObj;
+
+    els.overlayWordChoice.classList.remove('active');
+    els.overlayWaitingChoice.classList.remove('active');
+
+    if (state.canvas) {
+      state.canvas.clear(false);
+      state.canvas.setInteractive(true);
+    }
+
+    els.drawingToolbar.style.display = 'flex';
+    els.wordDisplay.textContent = `کلمه شما برای نقاشی: ${data.wordObj.word} ✏️`;
+    els.wordCategoryBadge.textContent = `دسته‌بندی: ${data.wordObj.category}`;
+    els.wordCategoryBadge.style.display = 'inline-block';
+    els.chatInput.disabled = true;
+    els.chatInput.placeholder = 'شما در حال نقاشی هستید 🎨';
+    els.chatSendBtn.disabled = true;
+  }
+
+  function handleTick(seconds, masked) {
+    els.timerText.textContent = seconds;
+    if (els.wordChoiceTimer) {
+      els.wordChoiceTimer.textContent = seconds;
+    }
+    const isUrgent = seconds <= 15;
+    els.turnTimer.classList.toggle('urgent', isUrgent);
+
+    if (seconds <= 10 && seconds > 0) {
+      SoundEngine.playTimerTick(true);
+    }
+
+    if (!state.isDrawer && masked) {
+      els.wordDisplay.textContent = masked;
+    }
+  }
+
+  function handleRoundEndHost(roundEndData) {
+    clearInterval(state.turnTimerInterval);
+    state.activeBots.forEach(b => b.cancelActions());
+
+    state.network.broadcast({
+      type: 'ROUND_END',
+      ...roundEndData
+    });
+
+    handleRoundEnd(roundEndData);
+
+    // After 4.5 seconds, advance to next turn or game over
+    setTimeout(() => {
+      const next = state.gameRoom.nextTurn();
+      if (next.status === 'GAME_OVER') {
+        state.network.broadcast({ type: 'GAME_OVER', podium: next.podium });
+        handleGameOver({ podium: next.podium });
+      } else {
+        startWordSelectionPhaseHost();
+      }
+    }, 4500);
+  }
+
+  function handleRoundEnd(data) {
+    els.overlayRoundEnd.classList.add('active');
+    els.roundEndWord.textContent = data.word || '';
+
+    // Render scoreboard delta
+    els.roundEndScores.innerHTML = '';
+    const scores = data.scores || [];
+    scores.forEach((p) => {
+      const row = document.createElement('div');
+      row.className = 'round-score-row';
+      row.innerHTML = `
+        <span class="p-name">${p.avatar} ${p.name}</span>
+        <span class="p-delta">+${p.roundScore || 0}</span>
+        <span class="p-total">${p.score} امتیاز</span>
+      `;
+      els.roundEndScores.appendChild(row);
+    });
+
+    SoundEngine.playCorrectGuess();
+  }
+
+  function handleGameOver(data) {
+    clearInterval(state.turnTimerInterval);
+    els.overlayRoundEnd.classList.remove('active');
+
+    showView('gameover');
+    SoundEngine.playVictoryFanfare();
+
+    // Start confetti
+    if (typeof ConfettiEngine !== 'undefined') {
+      ConfettiEngine.start(200, 8000);
+    }
+
+    // Render podium: 1st, 2nd, 3rd
+    const { first, second, third, all } = data.podium;
+    els.podiumContainer.innerHTML = `
+      <div class="podium-step step-second">
+        <div class="podium-avatar">${second ? second.avatar : '🥈'}</div>
+        <div class="podium-name">${second ? second.name : '---'}</div>
+        <div class="podium-score">${second ? second.score + ' امتیاز' : ''}</div>
+        <div class="podium-box">۲ 🥈</div>
+      </div>
+      <div class="podium-step step-first">
+        <div class="podium-crown">👑</div>
+        <div class="podium-avatar">${first ? first.avatar : '🥇'}</div>
+        <div class="podium-name">${first ? first.name : '---'}</div>
+        <div class="podium-score">${first ? first.score + ' امتیاز' : ''}</div>
+        <div class="podium-box">۱ 🥇</div>
+      </div>
+      <div class="podium-step step-third">
+        <div class="podium-avatar">${third ? third.avatar : '🥉'}</div>
+        <div class="podium-name">${third ? third.name : '---'}</div>
+        <div class="podium-score">${third ? third.score + ' امتیاز' : ''}</div>
+        <div class="podium-box">۳ 🥉</div>
+      </div>
+    `;
+
+    // Render remaining rankings
+    els.gameOverScores.innerHTML = '';
+    (all || []).forEach((p, idx) => {
+      const row = document.createElement('div');
+      row.className = 'game-over-row';
+      row.innerHTML = `
+        <span class="rank-num">#${idx + 1}</span>
+        <span class="rank-avatar">${p.avatar}</span>
+        <span class="rank-name">${p.name}</span>
+        <span class="rank-score">${p.score} امتیاز</span>
+      `;
+      els.gameOverScores.appendChild(row);
+    });
+  }
+
+  // --- Scoreboard & Chat Rendering ---
+  function renderScoreboard(players, drawer) {
+    if (!els.scoreboardList) return;
+    els.scoreboardList.innerHTML = '';
+
+    const sorted = [...(players || [])].sort((a, b) => b.score - a.score);
+
+    sorted.forEach((p, idx) => {
+      const isDrawer = drawer && drawer.id === p.id;
+      const isMe = p.id === state.myPlayerId;
+      const item = document.createElement('div');
+      item.className = 'score-item' + (isMe ? ' is-me' : '') + (p.guessedThisRound ? ' guessed' : '');
+
+      item.innerHTML = `
+        <div class="score-rank">#${idx + 1}</div>
+        <div class="score-avatar">${p.avatar}</div>
+        <div class="score-details">
+          <div class="score-name">${p.name} ${isDrawer ? '✏️' : (p.guessedThisRound ? '✅' : '')}</div>
+          <div class="score-pts">${p.score} امتیاز</div>
+        </div>
+      `;
+      els.scoreboardList.appendChild(item);
+    });
+  }
+
+  function renderChatMessage(msg) {
+    if (!els.chatMessages) return;
+
+    const div = document.createElement('div');
+    div.className = 'chat-message' + (msg.isSystem ? ' system-msg' : '') + (msg.isCorrect ? ' correct-msg' : '');
+
+    if (msg.isSystem) {
+      div.innerHTML = `<span class="msg-icon">${msg.avatar || '📢'}</span> <span class="msg-text">${msg.text}</span>`;
+    } else {
+      div.innerHTML = `<span class="msg-sender">${msg.avatar || ''} ${msg.sender}:</span> <span class="msg-text">${msg.text}</span>`;
+      SoundEngine.playChatPop();
+    }
+
+    els.chatMessages.appendChild(div);
+    els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
+  }
+
+  function submitGuess() {
+    const text = els.chatInput.value.trim();
+    if (!text) return;
+
+    els.chatInput.value = '';
+
+    if (state.isDrawer) return;
+
+    if (state.isHost) {
+      const res = state.gameRoom.submitGuess(state.myPlayerId, text);
+      if (res.type === 'CORRECT') {
+        SoundEngine.playCorrectGuess();
+        const chatMsg = {
+          sender: 'سیستم',
+          avatar: '🎉',
+          text: `${state.myName} کلمه را درست حدس زد! (+${res.points} امتیاز)`,
+          isSystem: true,
+          isCorrect: true
+        };
+        state.network.broadcast({ type: 'CHAT', ...chatMsg });
+        renderChatMessage(chatMsg);
+        broadcastRoomState();
+
+        if (res.allGuessed) {
+          handleRoundEndHost(res.turnEndData);
+        }
+      } else if (res.type === 'CLOSE') {
+        SoundEngine.playCloseGuess();
+        renderChatMessage({
+          sender: 'سیستم',
+          avatar: '💡',
+          text: 'نزدیک بود! چند حرف بیشتر دقت کن...',
+          isSystem: true
+        });
+      } else if (res.type === 'DRAWER_SPOILER_BLOCKED') {
+        renderChatMessage({
+          sender: 'سیستم',
+          avatar: '⚠️',
+          text: 'نقاش نمی‌تواند کلمه را در چت فاش کند!',
+          isSystem: true
+        });
+      } else if (res.type === 'ALREADY_GUESSED_SPOILER') {
+        renderChatMessage({
+          sender: 'سیستم',
+          avatar: '🤫',
+          text: 'شما قبلاً حدس زده‌اید، لطفاً پاسخ را لو ندهید!',
+          isSystem: true
+        });
+      } else if (res.type === 'ALREADY_GUESSED') {
+        const chatMsg = {
+          sender: state.myName,
+          avatar: state.myAvatar,
+          text: `[حدس زده] ${text}`
+        };
+        state.network.broadcast({ type: 'CHAT', ...chatMsg });
+        renderChatMessage(chatMsg);
+      } else if (res.type === 'CHAT') {
+        const chatMsg = {
+          sender: state.myName,
+          avatar: state.myAvatar,
+          text
+        };
+        state.network.broadcast({ type: 'CHAT', ...chatMsg });
+        renderChatMessage(chatMsg);
+      }
+    } else {
+      state.network.sendToHost({ type: 'GUESS', text });
+    }
+  }
+
+  // --- Notification Toast ---
+  function notify(message, type = 'info') {
+    const toast = document.createElement('div');
+    toast.className = `app-toast toast-${type}`;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+
+    setTimeout(() => {
+      toast.classList.add('fade-out');
+      setTimeout(() => toast.remove(), 400);
+    }, 3200);
+  }
+
+  // --- Setup Canvas and Tools ---
+  function initCanvas() {
+    state.canvas = new DrawingCanvas.DrawingCanvas(els.drawingCanvas, {
+      isInteractive: false,
+      initialColor: '#1e293b',
+      onAction: (action) => {
+        if (state.isDrawer) {
+          SoundEngine.playDrawSwoosh();
+          if (state.isHost) {
+            state.network.broadcast({ type: 'DRAW_ACTION', action });
+          } else {
+            state.network.sendToHost({ type: 'DRAW_ACTION', action });
+          }
+        }
+      }
+    });
+
+    // Color palette selection
+    els.paletteColors.forEach((swatch) => {
+      swatch.addEventListener('click', () => {
+        els.paletteColors.forEach(s => s.classList.remove('active'));
+        swatch.classList.add('active');
+        const color = swatch.dataset.color;
+        state.canvas.setColor(color);
+      });
+    });
+
+    // Brush size selection
+    els.brushSizes.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        els.brushSizes.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        state.canvas.setSize(btn.dataset.size);
+      });
+    });
+
+    // Tool buttons (pencil, eraser, bucket)
+    els.toolButtons.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        els.toolButtons.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        state.canvas.setTool(btn.dataset.tool);
+      });
+    });
+
+    // Clear Canvas
+    els.btnClear.addEventListener('click', () => {
+      if (state.isDrawer && state.canvas) {
+        state.canvas.clear(true);
+        SoundEngine.playClearCanvas();
+      }
+    });
+
+    // Undo Canvas
+    els.btnUndo.addEventListener('click', () => {
+      if (state.isDrawer && state.canvas) {
+        state.canvas.undo(true);
+      }
+    });
+  }
+
+  // --- Event Bindings ---
+  function bindEvents() {
+    // Lobby
+    els.btnCreateRoom.addEventListener('click', createRoom);
+    els.btnJoinRoom.addEventListener('click', () => joinRoom());
+    els.btnPracticeBots.addEventListener('click', startPracticeWithBots);
+
+    els.playerNameInput.addEventListener('input', validatePlayerName);
+    els.roomCodeInput.addEventListener('input', (e) => {
+      e.target.value = e.target.value.toUpperCase();
+    });
+
+    // Waiting Room
+    els.btnCopyCode.addEventListener('click', () => {
+      if (state.roomCode && navigator.clipboard) {
+        navigator.clipboard.writeText(state.roomCode).then(() => {
+          notify('کد اتاق کپی شد!', 'success');
+        });
+      }
+    });
+
+    els.btnCopyLink.addEventListener('click', () => {
+      if (state.roomCode && navigator.clipboard) {
+        const link = `${window.location.origin}${window.location.pathname}?room=${state.roomCode}`;
+        navigator.clipboard.writeText(link).then(() => {
+          notify('لینک دعوت اتاق کپی شد!', 'success');
+        });
+      }
+    });
+
+    els.btnAddBot.addEventListener('click', addBotPlayer);
+    els.btnStartGame.addEventListener('click', startGame);
+
+    els.btnLeaveWaiting.addEventListener('click', () => {
+      if (state.network) state.network.destroy();
+      showView('lobby');
+    });
+
+    // Game
+    els.btnMute.addEventListener('click', () => {
+      SoundEngine.toggleMute();
+      updateMuteButton();
+    });
+
+    els.btnLeaveGame.addEventListener('click', () => {
+      if (confirm('آیا مطمئن هستید که می‌خواهید از بازی خارج شوید؟')) {
+        if (state.network) state.network.destroy();
+        showView('lobby');
+      }
+    });
+
+    els.chatForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      submitGuess();
+    });
+
+    // Game Over
+    els.btnPlayAgain.addEventListener('click', () => {
+      if (state.isHost && state.gameRoom) {
+        state.gameRoom.restartGame();
+        broadcastRoomState();
+        showView('waiting');
+        updateWaitingRoomUI();
+      } else {
+        showView('waiting');
+      }
+    });
+
+    els.btnBackLobby.addEventListener('click', () => {
+      if (state.network) state.network.destroy();
+      showView('lobby');
+    });
+
+    // Window resize
+    window.addEventListener('resize', () => {
+      if (state.canvas && state.currentView === 'game') {
+        state.canvas.setupCanvas();
+      }
+    });
+
+    // PWA Install prompt
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      state.deferredPrompt = e;
+      if (els.installBtn) {
+        els.installBtn.style.display = 'inline-flex';
+        els.installBtn.addEventListener('click', () => {
+          state.deferredPrompt.prompt();
+          state.deferredPrompt.userChoice.then(() => {
+            state.deferredPrompt = null;
+            els.installBtn.style.display = 'none';
+          });
+        });
+      }
+    });
+  }
+
+  // --- App Initialization ---
+  function init() {
+    initElements();
+    initProfile();
+    updateMuteButton();
+    initCanvas();
+    bindEvents();
+    showView('lobby');
+
+    // Register Service Worker for PWA
+    if ('serviceWorker' in navigator && window.location.protocol.startsWith('http')) {
+      navigator.serviceWorker.register('./sw.js').catch((err) => {
+        console.warn('SW registration failed:', err);
+      });
+    }
+
+    console.log('نقاشباشی با موفقیت راه‌اندازی شد! 🎨');
+  }
+
+  document.addEventListener('DOMContentLoaded', init);
+})();
