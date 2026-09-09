@@ -372,6 +372,10 @@
           els.wordCategoryBadge.style.display = 'none';
         }
       }
+      const reminderEl = document.getElementById('drawer-word-reminder');
+      if (reminderEl) {
+        reminderEl.textContent = activeWord || '---';
+      }
     } else {
       const activeMasked = opts.masked !== undefined ? opts.masked : (els.wordDisplay ? els.wordDisplay.textContent : '---');
       let cat = opts.category !== undefined ? opts.category : (els.wordCategoryBadge ? els.wordCategoryBadge.textContent : '');
@@ -801,15 +805,19 @@
       const res = state.gameRoom.markPlayerDisconnected(playerId);
       if (!res || !res.player) return;
 
+      if (res.wasDrawer) {
+        handlePlayerLeft(playerId);
+        return;
+      }
+
       const notice = {
         sender: 'سیستم',
         avatar: '⏳',
-        text: `ارتباط ${res.player.name} موقتاً قطع شد. مهلت اتصال مجدد: ۲۸ ثانیه.`,
+        text: `ارتباط ${res.player.name} موقتاً قطع شد.`,
         isSystem: true
       };
       state.network.broadcast({ type: 'CHAT', ...notice });
       renderChatMessage(notice);
-      notify(`⚠️ ارتباط ${res.player.name} موقتاً قطع شد. در حال انتظار برای اتصال مجدد...`, 'warning');
 
       broadcastRoomState();
       updateWaitingRoomUI();
@@ -1103,13 +1111,13 @@
         }
       }
 
-      if (state.isDrawer && state.currentWord) {
+      if (state.isDrawer) {
         updateWordBanner({
           isDrawer: true,
-          word: state.currentWord.word,
-          category: state.currentWord.category
+          word: state.currentWord ? state.currentWord.word : '',
+          category: state.currentWord ? state.currentWord.category : (roomState.wordCategory || '')
         });
-      } else if (!state.isDrawer && roomState.maskedWord) {
+      } else if (roomState.maskedWord) {
         updateWordBanner({
           isDrawer: false,
           masked: roomState.maskedWord,
@@ -1158,6 +1166,12 @@
     }
     updateToolbarsState();
     updateInputState();
+
+    if (state.isDrawer) {
+      updateWordBanner({ isDrawer: true, word: '', category: '' });
+    } else {
+      updateWordBanner({ isDrawer: false, masked: `${drawer.name} در حال انتخاب کلمه است...`, category: '' });
+    }
 
     if (drawer.isBot) {
       // Bot drawer: auto selects random word after 1.5s
@@ -1360,13 +1374,11 @@
       if (data.wordObj) {
         state.currentWord = data.wordObj;
       }
-      if (state.currentWord) {
-        updateWordBanner({
-          isDrawer: true,
-          word: state.currentWord.word,
-          category: state.currentWord.category
-        });
-      }
+      updateWordBanner({
+        isDrawer: true,
+        word: state.currentWord ? state.currentWord.word : '',
+        category: state.currentWord ? state.currentWord.category : (data.category || '')
+      });
     } else {
       state.currentWord = null;
       updateWordBanner({
