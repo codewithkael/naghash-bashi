@@ -123,6 +123,8 @@
     els.guesserToolbar = document.getElementById('guesser-toolbar');
     els.recentChatTicker = document.getElementById('recent-chat-ticker');
     els.quickGuessForm = document.getElementById('quick-guess-form');
+    els.btnQuickChatToggle = document.getElementById('btn-quick-chat-toggle');
+    els.quickChatUnreadBadge = document.getElementById('quick-chat-unread-badge');
     els.quickGuessInput = document.getElementById('quick-guess-input');
     els.quickGuessSendBtn = document.getElementById('quick-guess-send-btn');
 
@@ -172,6 +174,7 @@
       if (els.drawerBackdrop) els.drawerBackdrop.classList.add('active');
       state.unreadChatCount = 0;
       if (els.chatUnreadBadge) els.chatUnreadBadge.style.display = 'none';
+      if (els.quickChatUnreadBadge) els.quickChatUnreadBadge.style.display = 'none';
       if (navigator.vibrate) navigator.vibrate([20]);
     }
   }
@@ -1597,9 +1600,14 @@
     // 3. Unread badge for mobile chat button if chat sheet is closed
     if (els.sidebarChat && !els.sidebarChat.classList.contains('open')) {
       state.unreadChatCount = (state.unreadChatCount || 0) + 1;
+      const countStr = state.unreadChatCount > 9 ? '+۹' : state.unreadChatCount;
       if (els.chatUnreadBadge) {
-        els.chatUnreadBadge.textContent = state.unreadChatCount > 9 ? '+۹' : state.unreadChatCount;
+        els.chatUnreadBadge.textContent = countStr;
         els.chatUnreadBadge.style.display = 'inline-block';
+      }
+      if (els.quickChatUnreadBadge) {
+        els.quickChatUnreadBadge.textContent = countStr;
+        els.quickChatUnreadBadge.style.display = 'inline-block';
       }
     }
   }
@@ -1848,6 +1856,15 @@
     }
     if (els.btnToggleChat) {
       els.btnToggleChat.addEventListener('click', toggleChatDrawer);
+    }
+    if (els.btnQuickChatToggle) {
+      els.btnQuickChatToggle.addEventListener('click', toggleChatDrawer);
+    }
+    if (els.recentChatTicker) {
+      els.recentChatTicker.addEventListener('click', toggleChatDrawer);
+    }
+    if (els.mobilePlayerRibbon) {
+      els.mobilePlayerRibbon.addEventListener('click', toggleScoreboardDrawer);
     }
     if (els.btnCloseScores) {
       els.btnCloseScores.addEventListener('click', closeAllDrawers);

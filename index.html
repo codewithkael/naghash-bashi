@@ -313,10 +313,13 @@
           <!-- Guesser Toolbar (Active for Guessers on mobile/tablet) -->
           <div id="guesser-toolbar" class="guesser-toolbar-wrap">
             <!-- Floating Recent Chat Ticker -->
-            <div id="recent-chat-ticker" class="recent-chat-ticker"></div>
+            <div id="recent-chat-ticker" class="recent-chat-ticker" title="مشاهده تمام پیام‌ها و حدس‌ها"></div>
 
             <!-- Quick Guess Form -->
             <form id="quick-guess-form" class="quick-guess-form">
+              <button type="button" id="btn-quick-chat-toggle" class="btn-icon btn-chat-quick-toggle" title="مشاهده گفت‌وگو و حدس‌ها" aria-label="مشاهده گفت‌وگو و حدس‌ها">
+                💬 <span id="quick-chat-unread-badge" class="unread-badge" style="display: none;">۰</span>
+              </button>
               <input type="text" id="quick-guess-input" placeholder="حدس خود را اینجا بنویسید..." autocomplete="off" autocorrect="off" autocapitalize="off" enterkeyhint="send">
               <button type="submit" id="quick-guess-send-btn" class="btn btn-primary btn-quick-send">ارسال 🚀</button>
             </form>

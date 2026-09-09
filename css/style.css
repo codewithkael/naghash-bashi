@@ -72,10 +72,12 @@
 
 html, body {
   width: 100%;
-  height: 100%;
-  height: 100dvh;
+  min-height: 100%;
+  min-height: 100dvh;
   min-height: -webkit-fill-available;
   overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   overscroll-behavior: none;
   overscroll-behavior-y: none;
   background-color: var(--bg-main);
@@ -108,15 +110,17 @@ html, body {
 /* Root App Shell */
 #app-container {
   width: 100%;
-  height: 100%;
-  height: var(--vvh, 100dvh);
+  min-height: 100vh;
+  min-height: 100dvh;
   min-height: var(--vvh, 100dvh);
   max-width: 1440px;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
   position: relative;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   padding-top: var(--sat);
   padding-bottom: var(--sab);
   padding-left: var(--sal);
@@ -241,8 +245,8 @@ html, body {
   flex-direction: column;
 }
 
-/* Scrollable Screens (Lobby, Waiting, GameOver) */
-#screen-lobby, #screen-waiting, #screen-gameover {
+/* Scrollable Screens (Lobby, Waiting, Game, GameOver) */
+#screen-lobby, #screen-waiting, #screen-game, #screen-gameover {
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
@@ -250,17 +254,15 @@ html, body {
   padding: 16px;
 }
 
-/* In-Game Arena Screen (Strictly non-scrollable, gesture safe) */
+/* In-Game Arena Screen */
 #screen-game {
-  overflow: hidden !important;
-  touch-action: none !important;
   flex: 1;
   min-height: 0;
-  height: 100%;
+  width: 100%;
   display: none;
   flex-direction: column;
   padding: 10px 14px;
-  gap: 8px;
+  gap: 10px;
 }
 
 #screen-game.active {
@@ -1110,11 +1112,12 @@ input[type="text"]:focus {
   display: none;
   overflow-x: auto;
   gap: 8px;
-  padding: 2px 0;
+  padding: 4px 2px;
   flex-shrink: 0;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
   touch-action: pan-x !important;
+  cursor: pointer;
 }
 
 .mobile-player-ribbon::-webkit-scrollbar {
@@ -1176,7 +1179,6 @@ input[type="text"]:focus {
   gap: 10px;
   flex: 1;
   min-height: 0;
-  overflow: hidden;
   position: relative;
 }
 
@@ -1276,11 +1278,10 @@ input[type="text"]:focus {
 .canvas-area {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   min-height: 0;
   flex: 1;
   position: relative;
-  overflow: hidden;
 }
 
 .canvas-container {
@@ -1295,6 +1296,7 @@ input[type="text"]:focus {
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 100%;
 }
 
 /* Crisp 3:2 Canvas */
@@ -1302,6 +1304,7 @@ input[type="text"]:focus {
   display: block;
   background: #ffffff;
   aspect-ratio: 3 / 2;
+  width: 100%;
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
@@ -1343,30 +1346,42 @@ input[type="text"]:focus {
 .toolbar-controls-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 10px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x !important;
+  padding: 2px 0;
+}
+
+.toolbar-controls-row::-webkit-scrollbar {
+  display: none;
 }
 
 .tool-group {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .tool-btn {
   background: rgba(15, 23, 42, 0.8);
   border: 1.5px solid var(--border);
   color: var(--text-main);
-  width: 38px;
-  height: 38px;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
   border-radius: var(--radius-sm);
-  font-size: 1.15rem;
+  font-size: 1.25rem;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  flex-shrink: 0;
 }
 
 .tool-btn:hover {
@@ -1393,14 +1408,17 @@ input[type="text"]:focus {
 .brush-size-btn {
   background: rgba(15, 23, 42, 0.8);
   border: 1.5px solid var(--border);
-  width: 38px;
-  height: 38px;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
   border-radius: var(--radius-sm);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   transition: all 0.2s;
+  flex-shrink: 0;
 }
 
 .brush-size-btn:hover {
@@ -1429,6 +1447,7 @@ input[type="text"]:focus {
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
   touch-action: pan-x !important;
+  padding: 4px 0;
 }
 
 .palette-scroll-container::-webkit-scrollbar {
@@ -1437,15 +1456,17 @@ input[type="text"]:focus {
 
 .palette-group {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   align-items: center;
   min-width: max-content;
 }
 
 .palette-color {
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-xs);
+  width: 42px;
+  height: 42px;
+  min-width: 42px;
+  min-height: 42px;
+  border-radius: var(--radius-sm);
   border: 2.5px solid transparent;
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
@@ -1481,6 +1502,7 @@ input[type="text"]:focus {
   max-height: 70px;
   overflow: hidden;
   justify-content: flex-end;
+  cursor: pointer;
 }
 
 .ticker-item {
@@ -1522,6 +1544,29 @@ input[type="text"]:focus {
   display: flex;
   gap: 8px;
   width: 100%;
+  align-items: center;
+}
+
+.btn-chat-quick-toggle {
+  min-width: 48px;
+  min-height: 48px;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-full);
+  font-size: 1.2rem;
+  position: relative;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-main);
+  cursor: pointer;
+}
+
+.btn-chat-quick-toggle:hover {
+  border-color: var(--primary);
 }
 
 .quick-guess-form input {
@@ -1535,6 +1580,7 @@ input[type="text"]:focus {
 .btn-quick-send {
   border-radius: var(--radius-full);
   padding: 10px 22px;
+  min-height: 48px;
   white-space: nowrap;
 }
 
@@ -2048,37 +2094,33 @@ input[type="text"]:focus {
 
 /* Tablet & Mobile Screens (<= 900px) */
 @media (max-width: 900px) {
-  /* Hide main header during active gameplay on mobile to prioritize canvas */
-  #app-container.in-game .main-header {
-    display: none !important;
-  }
-
   /* Header Compact Mode */
   .main-header {
-    padding: 8px 14px;
+    padding: 6px 12px;
   }
   
   .logo-icon {
-    font-size: 1.7rem;
+    font-size: 1.6rem;
   }
   
   .logo-title {
-    font-size: 1.25rem;
+    font-size: 1.2rem;
   }
   
   .btn-text-desktop {
     display: none;
   }
 
-  /* Game Screen: Switch Arena to Single Column */
+  /* Game Screen: Single Column & Scrollable */
   #screen-game {
-    padding: 6px 10px;
-    gap: 6px;
+    padding: 8px 10px;
+    gap: 8px;
   }
 
   .game-top-bar {
     padding: 6px 10px;
     min-height: 44px;
+    gap: 6px;
   }
 
   .mobile-action-btn {
@@ -2093,7 +2135,7 @@ input[type="text"]:focus {
     display: flex;
     flex-direction: column;
     grid-template-columns: none;
-    gap: 6px;
+    gap: 8px;
   }
 
   /* Scoreboard & Chat turn into Bottom Sheets */
@@ -2131,21 +2173,29 @@ input[type="text"]:focus {
     display: flex;
   }
 
-  /* Toolbar optimization on mobile */
+  .btn-chat-quick-toggle {
+    display: inline-flex;
+  }
+
+  /* Toolbar optimization on mobile - comfortable 44px targets */
   .toolbar-wrap {
-    padding: 6px 10px;
-    gap: 6px;
+    padding: 8px 10px;
+    gap: 8px;
   }
 
   .tool-btn, .brush-size-btn {
-    width: 36px;
-    height: 36px;
-    font-size: 1.05rem;
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    font-size: 1.2rem;
   }
 
   .palette-color {
-    width: 28px;
-    height: 28px;
+    width: 42px;
+    height: 42px;
+    min-width: 42px;
+    min-height: 42px;
   }
 
   /* Waiting room player slots on tablet */
@@ -2153,37 +2203,37 @@ input[type="text"]:focus {
     grid-template-columns: repeat(3, 1fr);
   }
 
-  /* Word choice cards layout on mobile */
+  /* Word choice cards layout on tablet/mobile */
   .word-choice-modal, .waiting-choice-modal, .round-end-modal {
-    padding: 14px 10px;
-    max-height: 94%;
+    padding: 18px 14px;
+    max-height: 90%;
   }
 
   .modal-icon, .spinner-brush {
-    font-size: 1.8rem;
-    margin-bottom: 4px;
+    font-size: 2.2rem;
+    margin-bottom: 6px;
   }
 
   .word-timer-badge {
-    padding: 4px 12px;
-    font-size: 0.85rem;
-    margin: 4px auto 8px auto;
+    padding: 4px 14px;
+    font-size: 0.9rem;
+    margin: 6px auto 10px auto;
   }
 
   .word-choices-grid {
     grid-template-columns: repeat(3, 1fr);
-    gap: 6px;
-    margin-top: 6px;
+    gap: 8px;
+    margin-top: 8px;
   }
 
   .word-choice-card {
-    min-height: 52px;
-    padding: 8px 4px;
-    gap: 2px;
+    min-height: 60px;
+    padding: 10px 6px;
+    gap: 4px;
   }
 
   .card-word {
-    font-size: 1.02rem;
+    font-size: 1.1rem;
   }
 }
 
@@ -2235,33 +2285,69 @@ input[type="text"]:focus {
   }
 
   .drawer-status-pill {
-    padding: 2px 8px;
-    font-size: 0.74rem;
+    padding: 3px 10px;
+    font-size: 0.8rem;
   }
 
   .toolbar-controls-row {
-    justify-content: center;
-    gap: 6px;
+    justify-content: flex-start;
+    gap: 8px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x !important;
   }
 
   .tool-btn, .brush-size-btn {
-    width: 35px;
-    height: 35px;
-    font-size: 1rem;
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    font-size: 1.2rem;
   }
 
   .palette-color {
-    width: 28px;
-    height: 28px;
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    min-height: 40px;
+  }
+
+  /* Word Choice Modal on Phones: 1 Column Stacked for Big Touchable Cards */
+  .word-choices-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    margin-top: 10px;
   }
 
   .word-choice-card {
-    min-height: 48px;
-    padding: 6px 3px;
+    min-height: 56px;
+    padding: 12px 16px;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    text-align: right;
+    gap: 8px;
+    border-radius: var(--radius-md);
   }
 
   .card-word {
-    font-size: 0.94rem;
+    font-size: 1.2rem;
+    font-weight: 800;
+  }
+
+  .card-category {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+  }
+
+  .card-diff {
+    font-size: 0.78rem;
+    font-weight: 800;
+    padding: 3px 10px;
+    border-radius: var(--radius-full);
+    background: rgba(255, 255, 255, 0.08);
   }
 
   .podium-wrap {
@@ -2298,38 +2384,43 @@ input[type="text"]:focus {
   }
 
   .round-badge {
-    padding: 4px 6px;
-    font-size: 0.75rem;
+    padding: 4px 8px;
+    font-size: 0.78rem;
   }
 
   .timer-pill {
-    padding: 4px 6px;
-    min-width: 60px;
-    font-size: 0.9rem;
+    padding: 4px 8px;
+    min-width: 65px;
+    font-size: 0.95rem;
   }
 
   .masked-word {
-    font-size: 1.05rem;
+    font-size: 1.15rem;
     letter-spacing: 2px;
   }
 
+  /* Comfortable touch targets on small phones via horizontal scroll */
   .tool-btn, .brush-size-btn {
-    width: 32px;
-    height: 32px;
-    font-size: 0.92rem;
+    width: 42px;
+    height: 42px;
+    min-width: 42px;
+    min-height: 42px;
+    font-size: 1.15rem;
   }
 
   .palette-color {
-    width: 24px;
-    height: 24px;
+    width: 38px;
+    height: 38px;
+    min-width: 38px;
+    min-height: 38px;
   }
 
   .word-choice-card {
-    min-height: 44px;
-    padding: 4px 2px;
+    min-height: 52px;
+    padding: 10px 14px;
   }
 
   .card-word {
-    font-size: 0.88rem;
+    font-size: 1.15rem;
   }
 }

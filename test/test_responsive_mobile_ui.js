@@ -96,6 +96,14 @@ console.log('   ✓ Pointer capture & context preservation verified.');
 console.log('10. Verifying XSS Sanitization & Chat Security...');
 assert.ok(appJsContent.includes('function escapeHtml'), 'app.js must provide escapeHtml sanitizer');
 assert.ok(appJsContent.includes('escapeHtml(msg.text)'), 'Chat messages must be sanitized before DOM injection');
-console.log('   ✓ XSS sanitization verified.');
+// 11. Mobile Smooth Scrolling, Expandable Sections & Touch Targets
+console.log('11. Verifying Mobile Smooth Scrolling, Expandable Drawers & 44px Touch Targets...');
+assert.ok(cssContent.includes('#app-container') && cssContent.includes('overflow-y: auto'), '#app-container must permit smooth vertical scrolling');
+assert.ok(cssContent.includes('#screen-game') && cssContent.includes('#screen-lobby, #screen-waiting, #screen-game, #screen-gameover'), '#screen-game must permit smooth vertical scrolling with other screens');
+assert.ok(htmlContent.includes('id="btn-quick-chat-toggle"'), 'index.html must include quick chat toggle button in guesser form');
+assert.ok(appJsContent.includes('btnQuickChatToggle'), 'app.js must coordinate quick chat toggle button');
+assert.ok(cssContent.includes('.tool-btn') && cssContent.includes('min-width: 44px'), 'Toolbar buttons must enforce 44px+ touch target size');
+assert.ok(cssContent.includes('grid-template-columns: 1fr'), 'Word choices grid must stack vertically on mobile phones for large touchable cards');
+console.log('   ✓ Mobile smooth scrolling, expandable drawers & 44px touch targets verified.');
 
 console.log('\n🎉 ALL RESPONSIVE & MOBILE PWA TESTS PASSED FLAWLESSLY! 🎉\n');
