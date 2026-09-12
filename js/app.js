@@ -1201,6 +1201,9 @@
       round: 1,
       totalRounds: state.gameRoom.totalRounds
     });
+    if (state.network && state.isHost && state.gameRoom) {
+      state.network.updateDiscoveryStatus('IN_GAME', state.gameRoom.players.length);
+    }
     startWordSelectionPhaseHost();
   }
 
@@ -2004,7 +2007,9 @@
 
     if (els.btnRefreshRooms) {
       els.btnRefreshRooms.addEventListener('click', () => {
-        renderActiveRoomsList(NetworkEngine.NetworkManager.getActiveRooms());
+        NetworkEngine.NetworkManager.fetchRemoteActiveRooms().then((rooms) => {
+          renderActiveRoomsList(rooms);
+        });
         notify('لیست اتاق‌های فعال به‌روزرسانی شد.', 'info');
       });
     }

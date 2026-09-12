@@ -47,10 +47,12 @@ assert.strictEqual(masked1, '_ _ _');
 const masked2 = WordBank.getMaskedDisplay('سیب', new Set([0]));
 assert.strictEqual(masked2, 'س _ _');
 
-// 6. Test Word Choices Selection
 const choices = WordBank.pickWordChoices();
 assert.strictEqual(choices.length, 3);
 const unique = new Set(choices.map(c => c.word));
 assert.strictEqual(unique.size, 3, 'Choices must be 3 distinct words');
+assert.strictEqual(choices[0].difficulty, 'easy', 'First choice must be easy');
+assert.strictEqual(choices[1].difficulty, 'medium', 'Second choice must be medium');
+assert.strictEqual(choices[2].difficulty, 'hard', 'Third choice must be hard');
 
 console.log('✅ WordBank tests passed successfully!');

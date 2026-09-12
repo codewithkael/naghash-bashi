@@ -748,8 +748,7 @@
             fetch('https://ntfy.sh/naghashbashi_public_rooms_v1', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ action: 'ROOM_ANNOUNCE', room: this.roomAnnounceData }),
-              mode: 'no-cors'
+              body: JSON.stringify({ action: 'ROOM_ANNOUNCE', room: this.roomAnnounceData })
             }).catch(() => {});
           } catch (_) {}
         }
@@ -786,8 +785,7 @@
           fetch('https://ntfy.sh/naghashbashi_public_rooms_v1', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'ROOM_ANNOUNCE', room: this.roomAnnounceData }),
-            mode: 'no-cors'
+            body: JSON.stringify({ action: 'ROOM_ANNOUNCE', room: this.roomAnnounceData })
           }).catch(() => {});
         } catch (_) {}
       }
@@ -828,8 +826,7 @@
             fetch('https://ntfy.sh/naghashbashi_public_rooms_v1', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ action: 'ROOM_CLOSED', roomCode }),
-              mode: 'no-cors'
+              body: JSON.stringify({ action: 'ROOM_CLOSED', roomCode })
             }).catch(() => {});
           } catch (_) {}
         }
@@ -840,6 +837,42 @@
         this.discoveryBc = null;
       }
       this.roomAnnounceData = null;
+    }
+
+    static async fetchRemoteActiveRooms() {
+      if (typeof fetch === 'undefined') return NetworkManager.getActiveRooms();
+
+      try {
+        const res = await fetch('https://ntfy.sh/naghashbashi_public_rooms_v1/json?poll=1&since=40s', {
+          cache: 'no-store'
+        });
+        if (res.ok) {
+          const text = await res.text();
+          const lines = text.split('\n').filter(Boolean);
+          if (typeof localStorage !== 'undefined') {
+            const raw = localStorage.getItem('naghash_active_rooms');
+            const roomsMap = raw ? JSON.parse(raw) : {};
+
+            lines.forEach((line) => {
+              try {
+                const item = JSON.parse(line);
+                if (item.event === 'message' && item.message) {
+                  const payload = JSON.parse(item.message);
+                  if (payload.action === 'ROOM_ANNOUNCE' && payload.room && payload.room.roomCode) {
+                    roomsMap[payload.room.roomCode] = payload.room;
+                  } else if (payload.action === 'ROOM_CLOSED' && payload.roomCode) {
+                    delete roomsMap[payload.roomCode];
+                  }
+                }
+              } catch (_) {}
+            });
+
+            localStorage.setItem('naghash_active_rooms', JSON.stringify(roomsMap));
+          }
+        }
+      } catch (_) {}
+
+      return NetworkManager.getActiveRooms();
     }
 
     static getActiveRooms() {
@@ -854,8 +887,8 @@
 
         Object.keys(roomsMap).forEach((code) => {
           const r = roomsMap[code];
-          // Consider alive if updated in last 25 seconds
-          if (r && (now - (r.updatedAt || 0) < 25000)) {
+          // Consider alive if updated in last 18 seconds (heartbeat is sent every 3.5s)
+          if (r && (now - (r.updatedAt || 0) < 18000)) {
             active.push(r);
           } else {
             delete roomsMap[code];
@@ -894,6 +927,21 @@
 
       if (typeof window !== 'undefined') {
         window.addEventListener('storage', storageListener);
+      }
+
+      // Initial remote fetch
+      NetworkManager.fetchRemoteActiveRooms().then((rooms) => {
+        try { callback(rooms); } catch (_) {}
+      });
+
+      // Regular HTTP polling fallback (every 3.5 seconds)
+      let pollTimer = null;
+      if (typeof setInterval !== 'undefined') {
+        pollTimer = setInterval(() => {
+          NetworkManager.fetchRemoteActiveRooms().then((rooms) => {
+            try { callback(rooms); } catch (_) {}
+          });
+        }, 3500);
       }
 
       // 1. Cloud WebSocket discovery for GitHub Pages / cross-device play
@@ -978,6 +1026,10 @@
 
       return {
         unregister() {
+          if (pollTimer) {
+            clearInterval(pollTimer);
+            pollTimer = null;
+          }
           if (bc) {
             try { bc.close(); } catch (_) {}
           }
