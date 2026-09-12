@@ -2052,6 +2052,28 @@
       });
     }
 
+    if (els.quickGuessInput) {
+      els.quickGuessInput.addEventListener('focus', () => {
+        // Prevent aggressive mobile browser auto-scroll from shifting canvas off-screen
+        requestAnimationFrame(() => {
+          window.scrollTo(0, 0);
+          document.body.scrollTop = 0;
+          if (els.screenGame) els.screenGame.scrollTop = 0;
+        });
+      });
+    }
+
+    // Stabilize view on mobile viewport change (virtual keyboard show/hide)
+    if (typeof window !== 'undefined' && window.visualViewport) {
+      window.visualViewport.addEventListener('resize', () => {
+        if (state.currentView === 'game') {
+          window.scrollTo(0, 0);
+          document.body.scrollTop = 0;
+          if (els.screenGame) els.screenGame.scrollTop = 0;
+        }
+      });
+    }
+
     // Game Controls
     els.btnMute.addEventListener('click', () => {
       SoundEngine.toggleMute();

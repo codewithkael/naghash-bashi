@@ -73,23 +73,25 @@
 html {
   width: 100%;
   min-height: 100%;
-  min-height: 100dvh;
+  min-height: 100vh;
+  min-height: 100svh;
   overflow-x: hidden;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  overscroll-behavior-y: auto;
+  overscroll-behavior-y: none;
   overscroll-behavior-x: none;
 }
 
 body {
   width: 100%;
   min-height: 100%;
-  min-height: 100dvh;
+  min-height: 100vh;
+  min-height: 100svh;
   min-height: -webkit-fill-available;
   overflow-x: hidden;
   overflow-y: visible;
   -webkit-overflow-scrolling: touch;
-  overscroll-behavior-y: auto;
+  overscroll-behavior-y: none;
   overscroll-behavior-x: none;
   background-color: var(--bg-main);
   color: var(--text-main);
@@ -125,8 +127,7 @@ body {
 #app-container {
   width: 100%;
   min-height: 100vh;
-  min-height: 100dvh;
-  min-height: var(--vvh, 100dvh);
+  min-height: 100svh;
   max-width: 1440px;
   margin: 0 auto;
   display: flex;
@@ -135,6 +136,7 @@ body {
   overflow-x: hidden;
   overflow-y: visible;
   -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: none;
   padding-top: var(--sat);
   padding-bottom: var(--sab);
   padding-left: var(--sal);
@@ -291,11 +293,42 @@ body {
 
 .lobby-card {
   width: 100%;
-  max-width: 860px;
+  max-width: 780px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 14px;
   margin: 0 auto;
+}
+
+/* VPN Notice Banner in Lobby */
+.vpn-notice-banner {
+  background: rgba(245, 158, 11, 0.12);
+  border: 1.5px solid rgba(245, 158, 11, 0.45);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-shadow: 0 4px 16px rgba(245, 158, 11, 0.08);
+  width: 100%;
+}
+
+.vpn-icon {
+  font-size: 1.45rem;
+  flex-shrink: 0;
+}
+
+.vpn-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.83rem;
+  color: var(--text-main);
+  line-height: 1.45;
+}
+
+.vpn-text strong {
+  color: #fbbf24;
 }
 
 .profile-card {
@@ -303,16 +336,16 @@ body {
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: 22px;
+  border-radius: var(--radius-md);
+  padding: 16px 20px;
   box-shadow: var(--shadow-md);
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
 }
 
 .card-title {
-  font-size: 1.2rem;
+  font-size: 1.05rem;
   font-weight: 800;
   color: var(--primary);
   display: flex;
@@ -323,11 +356,11 @@ body {
 .input-group {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .input-group label {
-  font-size: 0.92rem;
+  font-size: 0.86rem;
   font-weight: 700;
   color: var(--text-muted);
 }
@@ -339,10 +372,10 @@ input[type="text"] {
   color: var(--text-main);
   font-family: inherit;
   font-size: 1rem; /* 16px minimum prevents iOS Safari auto-zoom */
-  padding: 12px 16px;
+  padding: 10px 14px;
   outline: none;
   transition: all 0.2s;
-  min-height: 48px;
+  min-height: 44px;
 }
 
 input[type="text"]:focus {
@@ -360,11 +393,11 @@ input[type="text"]:focus {
 .avatar-selection-group {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .avatar-selection-group label {
-  font-size: 0.92rem;
+  font-size: 0.86rem;
   font-weight: 700;
   color: var(--text-muted);
 }
@@ -372,7 +405,7 @@ input[type="text"]:focus {
 .avatar-grid {
   display: grid;
   grid-template-columns: repeat(8, 1fr);
-  gap: 10px;
+  gap: 8px;
 }
 
 .avatar-opt {
@@ -380,17 +413,17 @@ input[type="text"]:focus {
   background: var(--bg-card);
   border: 2px solid var(--border);
   border-radius: var(--radius-md);
-  font-size: 1.8rem;
+  font-size: 1.5rem;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-  min-height: 52px;
+  min-height: 44px;
 }
 
 .avatar-opt:hover {
-  transform: translateY(-3px) scale(1.06);
+  transform: translateY(-2px) scale(1.05);
   border-color: var(--primary);
   background: var(--bg-card-hover);
 }
@@ -403,13 +436,13 @@ input[type="text"]:focus {
   border-color: var(--primary);
   background: var(--primary-soft);
   box-shadow: 0 0 16px var(--primary-glow);
-  transform: scale(1.08);
+  transform: scale(1.06);
 }
 
 .lobby-actions-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
 }
 
 .action-card {
@@ -417,19 +450,19 @@ input[type="text"]:focus {
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1.5px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: 20px;
+  border-radius: var(--radius-md);
+  padding: 16px;
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
-  gap: 12px;
+  gap: 10px;
   box-shadow: var(--shadow-sm);
   transition: all 0.25s;
 }
 
 .action-card:hover {
-  transform: translateY(-3px);
+  transform: translateY(-2px);
   box-shadow: var(--shadow-md);
 }
 
@@ -458,20 +491,20 @@ input[type="text"]:focus {
 }
 
 .action-icon {
-  font-size: 2.5rem;
+  font-size: 2rem;
   line-height: 1;
 }
 
 .action-card h3 {
-  font-size: 1.15rem;
+  font-size: 1.05rem;
   font-weight: 800;
   color: var(--text-main);
 }
 
 .action-card p {
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   color: var(--text-muted);
-  line-height: 1.45;
+  line-height: 1.4;
   flex: 1;
 }
 
@@ -491,10 +524,10 @@ input[type="text"]:focus {
 
 .btn {
   font-family: inherit;
-  font-size: 0.95rem;
+  font-size: 0.92rem;
   font-weight: 800;
   border-radius: var(--radius-md);
-  padding: 12px 20px;
+  padding: 10px 18px;
   border: none;
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
@@ -502,7 +535,7 @@ input[type="text"]:focus {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  min-height: 48px;
+  min-height: 44px;
   user-select: none;
 }
 
@@ -602,12 +635,12 @@ input[type="text"]:focus {
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: 20px 24px;
+  border-radius: var(--radius-md);
+  padding: 16px 20px;
   box-shadow: var(--shadow-md);
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
 }
 
 .active-rooms-header {
@@ -624,7 +657,7 @@ input[type="text"]:focus {
 }
 
 .active-rooms-title {
-  font-size: 1.12rem;
+  font-size: 1.02rem;
   font-weight: 800;
   color: var(--text-main);
 }
@@ -1719,12 +1752,12 @@ input[type="text"]:focus {
 }
 
 .btn-chat-quick-toggle {
-  min-width: 48px;
-  min-height: 48px;
-  width: 48px;
-  height: 48px;
+  min-width: 44px;
+  min-height: 44px;
+  width: 44px;
+  height: 44px;
   border-radius: var(--radius-full);
-  font-size: 1.2rem;
+  font-size: 1.15rem;
   position: relative;
   flex-shrink: 0;
   display: inline-flex;
@@ -1742,16 +1775,17 @@ input[type="text"]:focus {
 
 .quick-guess-form input {
   flex: 1;
-  min-height: 48px;
-  font-size: 1rem;
+  min-height: 44px;
+  font-size: 16px !important; /* Strictly 16px prevents iOS Safari from auto-zooming and panning */
   border-radius: var(--radius-full);
-  padding: 10px 18px;
+  padding: 8px 16px;
 }
 
 .btn-quick-send {
   border-radius: var(--radius-full);
-  padding: 10px 22px;
-  min-height: 48px;
+  padding: 8px 18px;
+  min-height: 44px;
+  font-size: 0.9rem;
   white-space: nowrap;
 }
 
