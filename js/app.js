@@ -548,12 +548,20 @@
         handleSyncRoomState(roomState);
       },
       onGameStarted: (data) => {
+        if (data && data.totalRounds) {
+          state.totalRounds = data.totalRounds;
+        }
         showView('game');
         clearInterval(state.roundEndTimerInterval);
         els.overlayRoundEnd.classList.remove('active');
         state.isDrawer = (data && data.drawerId === state.myPlayerId);
         if (state.isDrawer) {
           els.overlayWaitingChoice.classList.remove('active');
+        }
+        if (els.roundIndicator) {
+          const cur = (data && data.round) || 1;
+          const tot = (data && data.totalRounds) || state.totalRounds || 3;
+          els.roundIndicator.textContent = `دور ${toPersianDigits(cur)} از ${toPersianDigits(tot)}`;
         }
         SoundEngine.playTurnStart();
         notify('🎮 مسابقه آغاز شد!', 'info');
@@ -951,8 +959,10 @@
       isHost: true
     };
 
+    const selectedRounds = els.roundsSelect ? (parseInt(els.roundsSelect.value, 10) || 3) : 3;
+    state.totalRounds = selectedRounds;
     state.gameRoom = new RoomLogic.GameRoom(state.roomCode, hostPlayer, {
-      totalRounds: parseInt(els.roundsSelect.value, 10) || 3
+      totalRounds: selectedRounds
     });
 
     setupNetwork(true);
@@ -1008,6 +1018,10 @@
   function updateWaitingRoomUI() {
     els.displayRoomCode.textContent = state.roomCode || '---';
     els.hostControls.style.display = state.isHost ? 'block' : 'none';
+    if (els.roundsSelect) {
+      const activeRounds = state.totalRounds || (state.gameRoom ? state.gameRoom.totalRounds : 3);
+      els.roundsSelect.value = String(activeRounds);
+    }
 
     const players = state.gameRoom ? state.gameRoom.players : [];
     els.waitingCount.textContent = `${toPersianDigits(players.length)} از ${toPersianDigits(RoomLogic.MAX_PLAYERS)} نفر`;
@@ -1105,9 +1119,20 @@
       }
     }
 
+    if (roomState.totalRounds) {
+      state.totalRounds = roomState.totalRounds;
+      if (els.roundsSelect && !state.isHost) {
+        els.roundsSelect.value = String(roomState.totalRounds);
+      }
+    }
+
     if (state.currentView === 'game') {
       renderScoreboard(roomState.players, roomState.drawer);
-      els.roundIndicator.textContent = `دور ${toPersianDigits(roomState.currentRound)} از ${toPersianDigits(roomState.totalRounds)}`;
+      const curRound = roomState.currentRound || 1;
+      const totRounds = roomState.totalRounds || state.totalRounds || 3;
+      if (els.roundIndicator) {
+        els.roundIndicator.textContent = `دور ${toPersianDigits(curRound)} از ${toPersianDigits(totRounds)}`;
+      }
 
       if (typeof roomState.timerSeconds === 'number') {
         handleTick(roomState.timerSeconds, roomState.maskedWord);
@@ -1155,6 +1180,12 @@
   function startGame() {
     if (!state.isHost || !state.gameRoom) return;
 
+    if (els.roundsSelect) {
+      const selectedRounds = parseInt(els.roundsSelect.value, 10) || 3;
+      state.gameRoom.totalRounds = selectedRounds;
+      state.totalRounds = selectedRounds;
+    }
+
     const res = state.gameRoom.startGame();
     if (!res.success) {
       notify(res.message, 'error');
@@ -1162,7 +1193,14 @@
     }
 
     showView('game');
-    state.network.broadcast({ type: 'GAME_STARTED' });
+    if (els.roundIndicator) {
+      els.roundIndicator.textContent = `دور ۱ از ${toPersianDigits(state.gameRoom.totalRounds)}`;
+    }
+    state.network.broadcast({
+      type: 'GAME_STARTED',
+      round: 1,
+      totalRounds: state.gameRoom.totalRounds
+    });
     startWordSelectionPhaseHost();
   }
 
@@ -1298,6 +1336,8 @@
       type: 'ROUND_START',
       drawerId: drawer.id,
       drawerName: drawer.name,
+      round: state.gameRoom.currentRound,
+      totalRounds: state.gameRoom.totalRounds,
       masked: result.masked,
       category: result.word.category,
       difficulty: result.word.difficulty,
@@ -1321,6 +1361,8 @@
     handleRoundStart({
       drawerId: drawer.id,
       drawerName: drawer.name,
+      round: state.gameRoom.currentRound,
+      totalRounds: state.gameRoom.totalRounds,
       wordObj: result.word,
       masked: result.masked,
       category: result.word.category,
@@ -1354,6 +1396,10 @@
     els.overlayWordChoice.classList.remove('active');
     els.overlayWaitingChoice.classList.remove('active');
     els.overlayRoundEnd.classList.remove('active');
+
+    if (data.totalRounds) {
+      state.totalRounds = data.totalRounds;
+    }
 
     state.isDrawer = (data.drawerId === state.myPlayerId);
 
@@ -1390,6 +1436,12 @@
 
     SoundEngine.playTurnStart();
     renderScoreboard(state.gameRoom ? state.gameRoom.players : [], { id: data.drawerId, name: data.drawerName });
+
+    const curRound = state.gameRoom ? state.gameRoom.currentRound : (data.round || 1);
+    const maxRounds = state.gameRoom ? state.gameRoom.totalRounds : (data.totalRounds || state.totalRounds || 3);
+    if (els.roundIndicator) {
+      els.roundIndicator.textContent = `دور ${toPersianDigits(curRound)} از ${toPersianDigits(maxRounds)}`;
+    }
   }
 
   function handleDrawerSecretWord(data) {
@@ -1938,6 +1990,17 @@
     });
 
     els.btnStartGame.addEventListener('click', startGame);
+
+    if (els.roundsSelect) {
+      els.roundsSelect.addEventListener('change', () => {
+        const val = parseInt(els.roundsSelect.value, 10) || 3;
+        state.totalRounds = val;
+        if (state.isHost && state.gameRoom) {
+          state.gameRoom.totalRounds = val;
+          broadcastRoomState();
+        }
+      });
+    }
 
     if (els.btnRefreshRooms) {
       els.btnRefreshRooms.addEventListener('click', () => {
