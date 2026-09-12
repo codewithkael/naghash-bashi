@@ -101,9 +101,9 @@
     }
 
     static generateRoomCode() {
-      // 4-digit random room number e.g. NB-4821 (10,000 possibilities)
+      // Pure 4-digit random room number e.g. 4821 (1000..9999)
       const num = Math.floor(1000 + Math.random() * 9000);
-      return `NB-${num}`;
+      return String(num);
     }
 
     registerPlayerPeer(playerId, peerId) {
@@ -741,6 +741,18 @@
             this.ws.send(JSON.stringify({ action: 'ANNOUNCE_ROOM', room: this.roomAnnounceData }));
           } catch (_) {}
         }
+
+        // 4. Global cloud discovery (serverless cross-device on GitHub Pages)
+        if (typeof fetch !== 'undefined') {
+          try {
+            fetch('https://ntfy.sh/naghashbashi_public_rooms_v1', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action: 'ROOM_ANNOUNCE', room: this.roomAnnounceData }),
+              mode: 'no-cors'
+            }).catch(() => {});
+          } catch (_) {}
+        }
       };
 
       broadcastAnnounce();
@@ -766,6 +778,17 @@
       if (this.discoveryBc) {
         try {
           this.discoveryBc.postMessage({ action: 'ROOM_ANNOUNCE', room: this.roomAnnounceData });
+        } catch (_) {}
+      }
+
+      if (typeof fetch !== 'undefined') {
+        try {
+          fetch('https://ntfy.sh/naghashbashi_public_rooms_v1', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'ROOM_ANNOUNCE', room: this.roomAnnounceData }),
+            mode: 'no-cors'
+          }).catch(() => {});
         } catch (_) {}
       }
     }
@@ -799,6 +822,17 @@
             this.ws.send(JSON.stringify({ action: 'CLOSE_ROOM', roomCode }));
           } catch (_) {}
         }
+
+        if (typeof fetch !== 'undefined') {
+          try {
+            fetch('https://ntfy.sh/naghashbashi_public_rooms_v1', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action: 'ROOM_CLOSED', roomCode }),
+              mode: 'no-cors'
+            }).catch(() => {});
+          } catch (_) {}
+        }
       }
 
       if (this.discoveryBc) {
@@ -820,8 +854,8 @@
 
         Object.keys(roomsMap).forEach((code) => {
           const r = roomsMap[code];
-          // Consider alive if updated in last 16 seconds
-          if (r && (now - (r.updatedAt || 0) < 16000)) {
+          // Consider alive if updated in last 25 seconds
+          if (r && (now - (r.updatedAt || 0) < 25000)) {
             active.push(r);
           } else {
             delete roomsMap[code];
@@ -862,7 +896,42 @@
         window.addEventListener('storage', storageListener);
       }
 
-      // WebSocket relay discovery when running via server.js
+      // 1. Cloud WebSocket discovery for GitHub Pages / cross-device play
+      let cloudWs = null;
+      if (typeof WebSocket !== 'undefined') {
+        try {
+          cloudWs = new WebSocket('wss://ntfy.sh/naghashbashi_public_rooms_v1/ws?since=30s');
+          cloudWs.onmessage = (evt) => {
+            try {
+              const data = JSON.parse(evt.data);
+              if (data.event === 'message' && data.message) {
+                const payload = JSON.parse(data.message);
+                if (payload.action === 'ROOM_ANNOUNCE' && payload.room) {
+                  if (typeof localStorage !== 'undefined') {
+                    const raw = localStorage.getItem('naghash_active_rooms');
+                    const map = raw ? JSON.parse(raw) : {};
+                    map[payload.room.roomCode] = payload.room;
+                    localStorage.setItem('naghash_active_rooms', JSON.stringify(map));
+                  }
+                  callback(NetworkManager.getActiveRooms());
+                } else if (payload.action === 'ROOM_CLOSED' && payload.roomCode) {
+                  if (typeof localStorage !== 'undefined') {
+                    const raw = localStorage.getItem('naghash_active_rooms');
+                    if (raw) {
+                      const map = JSON.parse(raw);
+                      delete map[payload.roomCode];
+                      localStorage.setItem('naghash_active_rooms', JSON.stringify(map));
+                    }
+                  }
+                  callback(NetworkManager.getActiveRooms());
+                }
+              }
+            } catch (_) {}
+          };
+        } catch (_) {}
+      }
+
+      // 2. WebSocket relay discovery when running via server.js
       let discoveryWs = null;
       if (typeof window !== 'undefined' && window.location && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || (window.location.port && window.location.hostname !== 'github.io'))) {
         try {
@@ -914,6 +983,10 @@
           }
           if (typeof window !== 'undefined') {
             window.removeEventListener('storage', storageListener);
+          }
+          if (cloudWs) {
+            try { cloudWs.close(); } catch (_) {}
+            cloudWs = null;
           }
           if (discoveryWs) {
             try { discoveryWs.close(); } catch (_) {}

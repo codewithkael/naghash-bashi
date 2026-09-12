@@ -69,6 +69,15 @@
         return { success: false, error: 'ROOM_FULL', message: 'ظرفیت اتاق تکمیل است (حداکثر ۶ نفر).' };
       }
 
+      // Reject new players if game has already started
+      if (this.status !== 'LOBBY') {
+        return {
+          success: false,
+          error: 'GAME_ALREADY_STARTED',
+          message: 'امکان ورود به این مسابقه وجود ندارد؛ مسابقه در حال حاضر آغاز شده است.'
+        };
+      }
+
       // Profanity check on name
       if (ProfanityFilter && typeof ProfanityFilter.validateName === 'function') {
         const check = ProfanityFilter.validateName(playerInfo.name);

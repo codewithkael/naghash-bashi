@@ -146,6 +146,9 @@
     els.roundEndWord = document.getElementById('round-end-word');
     els.roundEndScores = document.getElementById('round-end-scores');
     els.roundEndTimer = document.getElementById('round-end-timer');
+    els.roundEndBarFill = document.getElementById('round-end-bar-fill');
+    els.canvasGuessTicker = document.getElementById('canvas-guess-ticker');
+    els.guessTickerList = document.getElementById('guess-ticker-list');
 
     // Game Over
     els.podiumContainer = document.getElementById('podium-container');
@@ -227,6 +230,10 @@
 
     closeAllDrawers();
 
+    if (viewName === 'lobby') {
+      renderActiveRoomsList(NetworkEngine.NetworkManager.getActiveRooms());
+    }
+
     if (viewName === 'game') {
       updateToolbarsState();
       updateInputState();
@@ -274,12 +281,13 @@
 
     renderAvatarPicker();
 
-    // Check URL query param: ?room=NB-1234
+    // Check URL query param: ?room=4821
     const urlParams = new URLSearchParams(window.location.search);
     const roomFromUrl = urlParams.get('room');
-    if (roomFromUrl) {
-      els.roomCodeInput.value = roomFromUrl.toUpperCase();
-      notify('کد اتاق از لینک دریافت شد! نام خود را انتخاب کرده و دکمه ورود به اتاق را لمس کنید.', 'info');
+    if (roomFromUrl && els.roomCodeInput) {
+      const clean = toEnglishDigits(roomFromUrl).replace(/[^0-9]/g, '');
+      els.roomCodeInput.value = clean;
+      notify(`کد اتاق ${clean} از لینک دریافت شد! نام خود را انتخاب کرده و دکمه ورود را لمس کنید.`, 'info');
     }
   }
 
@@ -325,10 +333,17 @@
     return true;
   }
 
-  // --- Persian Number Helper ---
+  // --- Persian & English Digit Helpers ---
   function toPersianDigits(n) {
     if (n === null || n === undefined) return '';
     return String(n).replace(/[0-9]/g, d => '۰۱۲۳۴۵۶۷۸۹'[d]);
+  }
+
+  function toEnglishDigits(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d))
+      .replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d));
   }
 
   // --- Session Management (Dropped per user request: keep state clean & straightforward) ---
@@ -437,11 +452,19 @@
       item.className = 'active-room-item';
 
       const isLobby = r.status === 'LOBBY';
-      const statusText = isLobby ? 'در انتظار بازیکن ⏳' : 'در حال مسابقه 🎨';
+      const statusText = isLobby ? 'در انتظار بازیکن ⏳' : 'در حال مسابقه 🔒';
       const statusClass = isLobby ? 'status-lobby' : 'status-ingame';
       const pCount = r.playerCount || 1;
       const maxP = r.maxPlayers || 6;
       const isFull = pCount >= maxP;
+      const canJoin = isLobby && !isFull;
+
+      let btnLabel = 'ورود سریع 🚀';
+      if (!isLobby) {
+        btnLabel = 'مسابقه آغاز شده 🚫';
+      } else if (isFull) {
+        btnLabel = 'ظرفیت تکمیل 🔒';
+      }
 
       item.innerHTML = `
         <div class="room-item-info">
@@ -452,13 +475,13 @@
             <span class="room-status-badge ${statusClass}">${statusText}</span>
           </div>
         </div>
-        <button type="button" class="btn btn-secondary btn-quick-join" data-code="${escapeHtml(r.roomCode)}" ${isFull ? 'disabled' : ''}>
-          ${isFull ? 'ظرفیت تکمیل 🔒' : 'ورود سریع 🚀'}
+        <button type="button" class="btn btn-secondary btn-quick-join" data-code="${escapeHtml(r.roomCode)}" ${canJoin ? '' : 'disabled'}>
+          ${btnLabel}
         </button>
       `;
 
       const btnJoin = item.querySelector('.btn-quick-join');
-      if (btnJoin && !isFull) {
+      if (btnJoin && canJoin) {
         btnJoin.addEventListener('click', () => {
           if (els.roomCodeInput) {
             els.roomCodeInput.value = r.roomCode;
@@ -578,6 +601,13 @@
           state.network.initHost(state.roomCode, hostPlayer);
         } else {
           notify(err, 'error');
+          if (!state.isHost) {
+            if (state.network) {
+              state.network.destroy();
+              state.network = null;
+            }
+            showView('lobby');
+          }
         }
       },
       onHostReceivedPacket: ({ fromPeerId, packet }) => {
@@ -938,10 +968,11 @@
 
   function joinRoom(code) {
     if (!validatePlayerName()) return;
-    const cleanCode = (code || els.roomCodeInput.value).trim().toUpperCase();
+    let raw = (code || els.roomCodeInput.value || '').trim();
+    const cleanCode = toEnglishDigits(raw).replace(/[^0-9]/g, '');
 
-    if (!cleanCode) {
-      notify('لطفاً کد اتاق را وارد کنید.', 'error');
+    if (!cleanCode || cleanCode.length !== 4) {
+      notify('لطفاً کد ۴ رقمی معتبر اتاق را وارد کنید.', 'error');
       return;
     }
 
@@ -967,41 +998,11 @@
   }
 
   function startPracticeWithBots() {
-    if (!validatePlayerName()) return;
-    createRoom();
-
-    // Add 3 friendly bots
-    for (let i = 0; i < 3; i++) {
-      addBotPlayer();
-    }
+    // Bots removed per user request
   }
 
   function addBotPlayer() {
-    if (!state.isHost || !state.gameRoom) return;
-
-    if (state.gameRoom.players.length >= RoomLogic.MAX_PLAYERS) {
-      notify('ظرفیت اتاق تکمیل است (حداکثر ۶ نفر).', 'error');
-      return;
-    }
-
-    const existingNames = state.gameRoom.players.map(p => p.name);
-    const profile = BotEngine.getAvailableBotProfile(existingNames);
-    const botId = 'bot_' + Math.random().toString(36).substr(2, 7);
-
-    const bot = new BotEngine.BotPlayer(botId, profile);
-    state.activeBots.push(bot);
-
-    state.gameRoom.addPlayer({
-      id: bot.id,
-      name: bot.name,
-      avatar: bot.avatar,
-      isBot: true
-    });
-
-    broadcastRoomState();
-    updateWaitingRoomUI();
-    SoundEngine.playTurnStart();
-    notify(`🤖 ${bot.name} به اتاق افزوده شد!`, 'info');
+    // Bots removed per user request
   }
 
   function updateWaitingRoomUI() {
@@ -1009,7 +1010,7 @@
     els.hostControls.style.display = state.isHost ? 'block' : 'none';
 
     const players = state.gameRoom ? state.gameRoom.players : [];
-    els.waitingCount.textContent = `${players.length} از ۶ نفر`;
+    els.waitingCount.textContent = `${toPersianDigits(players.length)} از ${toPersianDigits(RoomLogic.MAX_PLAYERS)} نفر`;
 
     // Render 6 slots
     els.waitingPlayerSlots.innerHTML = '';
@@ -1020,7 +1021,7 @@
 
       if (p) {
         const isDisc = p.connected === false;
-        const badgeText = isDisc ? 'قطع ارتباط ⏳' : (p.isHost ? 'میزبان' : (p.isBot ? 'ربات' : 'آماده'));
+        const badgeText = isDisc ? 'قطع ارتباط ⏳' : (p.isHost ? 'میزبان' : 'آماده');
         const badgeStyle = isDisc ? 'style="background: rgba(239, 68, 68, 0.2); color: #f87171;"' : '';
         slot.innerHTML = `
           <div class="slot-avatar">${escapeHtml(p.avatar)}</div>
@@ -1040,7 +1041,7 @@
       const canStart = players.length >= RoomLogic.MIN_PLAYERS;
       els.btnStartGame.disabled = !canStart;
       els.btnStartGame.title = canStart ? 'شروع بازی' : 'حداقل ۲ بازیکن نیاز است';
-      els.btnAddBot.disabled = players.length >= RoomLogic.MAX_PLAYERS;
+      if (els.btnAddBot) els.btnAddBot.disabled = players.length >= RoomLogic.MAX_PLAYERS;
     }
   }
 
@@ -1079,7 +1080,7 @@
 
         if (p) {
           const isDisc = p.connected === false;
-          const badgeText = isDisc ? 'قطع ارتباط ⏳' : (p.isHost ? 'میزبان' : (p.isBot ? 'ربات' : 'آماده'));
+          const badgeText = isDisc ? 'قطع ارتباط ⏳' : (p.isHost ? 'میزبان' : 'آماده');
           const badgeStyle = isDisc ? 'style="background: rgba(239, 68, 68, 0.2); color: #f87171;"' : '';
           slot.innerHTML = `
             <div class="slot-avatar">${escapeHtml(p.avatar)}</div>
@@ -1100,7 +1101,7 @@
         const canStart = roomState.players.length >= RoomLogic.MIN_PLAYERS;
         els.btnStartGame.disabled = !canStart;
         els.btnStartGame.title = canStart ? 'شروع بازی' : 'حداقل ۲ بازیکن نیاز است';
-        els.btnAddBot.disabled = roomState.players.length >= RoomLogic.MAX_PLAYERS;
+        if (els.btnAddBot) els.btnAddBot.disabled = roomState.players.length >= RoomLogic.MAX_PLAYERS;
       }
     }
 
@@ -1198,16 +1199,6 @@
       updateWordBanner({ isDrawer: false, masked: `${drawer.name} در حال انتخاب کلمه است...`, category: '' });
     }
 
-    if (drawer.isBot) {
-      // Bot drawer: auto selects random word after 1.5s
-      setTimeout(() => {
-        const choice = data.wordChoices[Math.floor(Math.random() * data.wordChoices.length)];
-        const result = state.gameRoom.selectWord(choice);
-        startDrawingPhaseHost(result);
-      }, 1500);
-      return;
-    }
-
     if (state.isDrawer) {
       showWordChoiceModal(data.wordChoices);
     } else {
@@ -1215,7 +1206,7 @@
       const titleEl = els.overlayWaitingChoice.querySelector('h3');
       if (titleEl) titleEl.textContent = `${drawer.name} در حال انتخاب کلمه است...`;
       if (els.waitingChoiceTimer) {
-        els.waitingChoiceTimer.textContent = '۱۵';
+        els.waitingChoiceTimer.textContent = toPersianDigits(15);
       }
 
       const wordChoicesPacket = {
@@ -1337,41 +1328,6 @@
       timerSeconds: result.timerSeconds
     });
 
-    // If drawer is bot, schedule bot drawing actions
-    if (drawer && drawer.isBot) {
-      const bot = state.activeBots.find(b => b.id === drawer.id);
-      if (bot) {
-        bot.startDrawing(state.canvas, (action) => {
-          state.network.broadcast({ type: 'DRAW_ACTION', action });
-        });
-      }
-    }
-
-    // Schedule bot guesses for non-drawer bots
-    state.activeBots.forEach((bot) => {
-      if (bot.id !== drawer.id) {
-        bot.scheduleGuess(result.word.word, (botId, guessWord) => {
-          const res = state.gameRoom.submitGuess(botId, guessWord);
-          if (res.type === 'CORRECT') {
-            SoundEngine.playCorrectGuess();
-            const chatMsg = {
-              sender: 'سیستم',
-              avatar: '🎉',
-              text: `${res.player.name} کلمه را درست حدس زد! (+${res.points} امتیاز)`,
-              isSystem: true,
-              isCorrect: true
-            };
-            state.network.broadcast({ type: 'CHAT', ...chatMsg });
-            renderChatMessage(chatMsg);
-            broadcastRoomState();
-
-            if (res.allGuessed) {
-              handleRoundEndHost(res.turnEndData);
-            }
-          }
-        });
-      }
-    });
 
     // 60s Host timer tick
     state.turnTimerInterval = setInterval(() => {
@@ -1428,6 +1384,10 @@
 
     updateInputState();
 
+    if (els.guessTickerList) {
+      els.guessTickerList.innerHTML = '<div class="ticker-empty-placeholder">در انتظار ارسال حدس‌های بازیکنان...</div>';
+    }
+
     SoundEngine.playTurnStart();
     renderScoreboard(state.gameRoom ? state.gameRoom.players : [], { id: data.drawerId, name: data.drawerName });
   }
@@ -1456,12 +1416,13 @@
   }
 
   function handleTick(seconds, masked) {
-    els.timerText.textContent = seconds;
+    const pSeconds = toPersianDigits(seconds);
+    els.timerText.textContent = pSeconds;
     if (els.wordChoiceTimer) {
-      els.wordChoiceTimer.textContent = seconds;
+      els.wordChoiceTimer.textContent = pSeconds;
     }
     if (els.waitingChoiceTimer) {
-      els.waitingChoiceTimer.textContent = seconds;
+      els.waitingChoiceTimer.textContent = pSeconds;
     }
     const isUrgent = seconds <= 15;
     els.turnTimer.classList.toggle('urgent', isUrgent);
@@ -1481,7 +1442,6 @@
   function handleRoundEndHost(roundEndData) {
     clearInterval(state.turnTimerInterval);
     clearInterval(state.roundEndTimerInterval);
-    state.activeBots.forEach(b => b.cancelActions());
 
     const pauseSeconds = 5;
 
@@ -1524,15 +1484,21 @@
       els.roundEndScores.appendChild(row);
     });
 
-    // Start preparation timer countdown for next round
+    // Start prominent preparation timer countdown for next round
     clearInterval(state.roundEndTimerInterval);
-    let secondsLeft = (typeof data.duration === 'number' && data.duration > 0) ? data.duration : 5;
+    const totalDuration = (typeof data.duration === 'number' && data.duration > 0) ? data.duration : 5;
+    let secondsLeft = totalDuration;
+
     const updateRoundEndUI = (sec) => {
       if (els.roundEndTimer) {
         els.roundEndTimer.textContent = toPersianDigits(sec);
       }
       if (els.timerText) {
         els.timerText.textContent = toPersianDigits(sec);
+      }
+      if (els.roundEndBarFill) {
+        const pct = Math.max(0, Math.min(100, (sec / totalDuration) * 100));
+        els.roundEndBarFill.style.width = `${pct}%`;
       }
     };
     updateRoundEndUI(secondsLeft);
@@ -1678,7 +1644,34 @@
       els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
     }
 
-    // 2. Floating Live Ticker above Guesser Input
+    // 2. 3-Item Live Scrolling Guess / Chat Ticker Under Canvas
+    if (els.guessTickerList) {
+      const placeholder = els.guessTickerList.querySelector('.ticker-empty-placeholder');
+      if (placeholder) {
+        placeholder.remove();
+      }
+
+      const row = document.createElement('div');
+      row.className = 'guess-ticker-row' + (msg.isCorrect ? ' correct' : (msg.isSystem ? ' system' : ''));
+
+      if (msg.isCorrect) {
+        row.innerHTML = `<span class="ticker-sender">🎉 ${escapeHtml(msg.sender || 'سیستم')}:</span> <span class="ticker-text">${escapeHtml(msg.text)}</span>`;
+      } else if (msg.isSystem) {
+        row.innerHTML = `<span class="ticker-sender">${escapeHtml(msg.avatar || '📢')}</span> <span class="ticker-text">${escapeHtml(msg.text)}</span>`;
+      } else {
+        row.innerHTML = `<span class="ticker-sender">${escapeHtml(msg.avatar || '💬')} ${escapeHtml(msg.sender)}:</span> <span class="ticker-text">${escapeHtml(msg.text)}</span>`;
+      }
+
+      els.guessTickerList.appendChild(row);
+
+      // Keep strictly max 3 items in the ticker
+      while (els.guessTickerList.children.length > 3) {
+        els.guessTickerList.removeChild(els.guessTickerList.firstChild);
+      }
+      els.guessTickerList.scrollTop = els.guessTickerList.scrollHeight;
+    }
+
+    // 3. Floating Live Ticker above Guesser Input
     if (els.recentChatTicker) {
       const tickerItem = document.createElement('div');
       tickerItem.className = 'ticker-item' + (msg.isCorrect ? ' correct' : '');
@@ -1887,7 +1880,6 @@
     // Lobby
     els.btnCreateRoom.addEventListener('click', createRoom);
     els.btnJoinRoom.addEventListener('click', () => joinRoom());
-    els.btnPracticeBots.addEventListener('click', startPracticeWithBots);
 
     els.playerNameInput.addEventListener('input', () => {
       els.nameError.style.display = 'none';
@@ -1945,7 +1937,6 @@
       }
     });
 
-    els.btnAddBot.addEventListener('click', addBotPlayer);
     els.btnStartGame.addEventListener('click', startGame);
 
     if (els.btnRefreshRooms) {
@@ -1973,6 +1964,9 @@
     }
     if (els.recentChatTicker) {
       els.recentChatTicker.addEventListener('click', toggleChatDrawer);
+    }
+    if (els.canvasGuessTicker) {
+      els.canvasGuessTicker.addEventListener('click', toggleChatDrawer);
     }
     if (els.mobilePlayerRibbon) {
       els.mobilePlayerRibbon.addEventListener('click', toggleScoreboardDrawer);

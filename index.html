@@ -80,23 +80,13 @@
           <div class="action-card secondary-card">
             <div class="action-icon">🔑</div>
             <h3>پیوستن به اتاق</h3>
-            <p>کد ۶ رقمی اتاق دوستتان را وارد کنید و وارد رقابت شوید.</p>
+            <p>کد ۴ رقمی اتاق دوستتان را وارد کنید و وارد رقابت شوید.</p>
             <form id="join-room-form" class="join-input-wrap">
-              <input type="text" id="room-code-input" placeholder="مثال: NB-256" maxlength="8" autocomplete="off" autocapitalize="characters" autocorrect="off" enterkeyhint="go">
+              <input type="text" id="room-code-input" placeholder="مثال: ۴۸۲۱" maxlength="4" autocomplete="off" autocapitalize="off" autocorrect="off" inputmode="numeric" pattern="[0-9]*" enterkeyhint="go">
               <button type="submit" id="btn-join-room" class="btn btn-secondary">
                 ورود 🚀
               </button>
             </form>
-          </div>
-
-          <!-- Practice with Bots -->
-          <div class="action-card solo-card">
-            <div class="action-icon">🤖</div>
-            <h3>بازی تمرینی با بات‌ها</h3>
-            <p>بدون نیاز به دوستان، فوراً با ۳ هوش مصنوعی بامزه بازی کنید و لذت ببرید!</p>
-            <button id="btn-practice-bots" class="btn btn-accent btn-block">
-              🎯 شروع تمرین انفرادی
-            </button>
           </div>
         </div>
 
@@ -135,7 +125,7 @@
         <div class="room-code-banner">
           <span class="banner-label">کد اختصاصی اتاق:</span>
           <div class="code-box">
-            <span id="display-room-code" class="code-text">NB-000</span>
+            <span id="display-room-code" class="code-text">----</span>
             <div class="code-buttons-row">
               <button id="btn-copy-code" class="btn-icon btn-chip" title="کپی کد اتاق">📋 کپی کد</button>
               <button id="btn-copy-link" class="btn-icon btn-chip" title="کپی لینک مستقیم دعوت">🔗 کپی لینک دعوت</button>
@@ -161,9 +151,6 @@
             </select>
           </div>
           <div class="host-buttons-row">
-            <button id="btn-add-bot" class="btn btn-secondary">
-              ➕ افزودن بازیکن بات 🤖
-            </button>
             <button id="btn-start-game" class="btn btn-success btn-large" disabled>
               🏁 شروع مسابقه نقاشباشی!
             </button>
@@ -243,7 +230,14 @@
               <div class="waiting-choice-modal">
                 <div class="spinner-brush">🖌️</div>
                 <h3>نقاش در حال انتخاب کلمه است...</h3>
-                <div class="word-timer-badge">⏱️ زمان باقی‌مانده: <span id="waiting-choice-timer">۱۵</span> ثانیه</div>
+                <div class="round-prep-timer-box">
+                  <div class="prep-timer-title">زمان باقی‌مانده برای انتخاب کلمه</div>
+                  <div class="prep-timer-digits">
+                    <span class="prep-timer-icon">⏱️</span>
+                    <strong id="waiting-choice-timer" class="prep-timer-num">۱۵</strong>
+                    <span class="prep-timer-sec">ثانیه</span>
+                  </div>
+                </div>
                 <p>قلم‌موها در حال آماده‌سازی هستند!</p>
               </div>
             </div>
@@ -256,12 +250,33 @@
                 <div class="revealed-word-box">
                   کلمه صحیح: <strong id="round-end-word">---</strong>
                 </div>
-                <div id="round-end-scores" class="round-scores-list"></div>
-                <div class="round-end-timer-badge" id="round-end-timer-wrap">
-                  ⏱️ آماده‌سازی برای دور بعد: <strong id="round-end-timer">۵</strong> ثانیه
+
+                <!-- Prominent Animated Countdown for Next Turn Preparation -->
+                <div class="round-prep-timer-box" id="round-end-timer-wrap">
+                  <div class="prep-timer-title">آماده‌سازی برای دور بعد</div>
+                  <div class="prep-timer-digits">
+                    <span class="prep-timer-icon">⏳</span>
+                    <strong id="round-end-timer" class="prep-timer-num">۵</strong>
+                    <span class="prep-timer-sec">ثانیه</span>
+                  </div>
+                  <div class="prep-timer-bar">
+                    <div id="round-end-bar-fill" class="prep-timer-bar-fill"></div>
+                  </div>
                 </div>
-                <p class="next-turn-notice">آماده‌سازی برای دور بعد...</p>
+
+                <div id="round-end-scores" class="round-scores-list"></div>
               </div>
+            </div>
+          </div>
+
+          <!-- 3-Item Live Guess / Chat Ticker Under Canvas -->
+          <div id="canvas-guess-ticker" class="canvas-guess-ticker" title="مشاهده گفت‌وگو و حدس‌ها">
+            <div class="guess-ticker-bar">
+              <span class="ticker-live-dot"></span>
+              <span class="ticker-heading">آخرین حدس‌ها:</span>
+            </div>
+            <div id="guess-ticker-list" class="guess-ticker-list">
+              <div class="ticker-empty-placeholder">در انتظار ارسال حدس‌های بازیکنان...</div>
             </div>
           </div>
 
@@ -387,7 +402,6 @@
   <script src="js/canvas.js"></script>
   <script src="js/network.js"></script>
   <script src="js/audio.js"></script>
-  <script src="js/bot.js"></script>
   <script src="js/confetti.js"></script>
   <script src="js/app.js"></script>
 </body>
