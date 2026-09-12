@@ -528,6 +528,10 @@
         showView('game');
         clearInterval(state.roundEndTimerInterval);
         els.overlayRoundEnd.classList.remove('active');
+        state.isDrawer = (data && data.drawerId === state.myPlayerId);
+        if (state.isDrawer) {
+          els.overlayWaitingChoice.classList.remove('active');
+        }
         SoundEngine.playTurnStart();
         notify('🎮 مسابقه آغاز شد!', 'info');
       },
@@ -540,8 +544,14 @@
       onChatMessage: (msg) => {
         renderChatMessage(msg);
       },
-      onWordChoices: (choices) => {
-        showWordChoiceModal(choices);
+      onWordChoices: (choices, packet) => {
+        const actualChoices = Array.isArray(choices) ? choices : (packet && packet.choices);
+        const targetDrawerId = packet && (packet.targetPlayerId || packet.drawerId);
+        if (!targetDrawerId || targetDrawerId === state.myPlayerId) {
+          state.isDrawer = true;
+          els.overlayWaitingChoice.classList.remove('active');
+          showWordChoiceModal(actualChoices);
+        }
       },
       onRoundStart: (data) => {
         handleRoundStart(data);
@@ -1118,6 +1128,9 @@
           if (els.waitingChoiceTimer) {
             els.waitingChoiceTimer.textContent = roomState.timer ? toPersianDigits(roomState.timer) : '۱۵';
           }
+        } else {
+          els.overlayWaitingChoice.classList.remove('active');
+          state.isDrawer = true;
         }
       }
 
@@ -1205,10 +1218,14 @@
         els.waitingChoiceTimer.textContent = '۱۵';
       }
 
-      state.network.sendToPeer(drawer.id, {
+      const wordChoicesPacket = {
         type: 'WORD_CHOICES',
+        targetPlayerId: drawer.id,
+        drawerId: drawer.id,
         choices: data.wordChoices
-      });
+      };
+      state.network.sendToPeer(drawer.id, wordChoicesPacket);
+      state.network.broadcast(wordChoicesPacket);
     }
 
     // Start 15s countdown on Host
@@ -1298,12 +1315,15 @@
 
     // 2. Send secret word to remote DRAWER only
     if (drawer.id !== state.myPlayerId && !drawer.isBot) {
-      state.network.sendToPeer(drawer.id, {
+      const secretPacket = {
         type: 'DRAWER_SECRET_WORD',
+        targetPlayerId: drawer.id,
         drawerId: drawer.id,
         wordObj: result.word,
         timerSeconds: result.timerSeconds
-      });
+      };
+      state.network.sendToPeer(drawer.id, secretPacket);
+      state.network.broadcast(secretPacket);
     }
 
     // 3. Host handles round start locally
@@ -1413,6 +1433,7 @@
   }
 
   function handleDrawerSecretWord(data) {
+    if (data.drawerId && data.drawerId !== state.myPlayerId) return;
     showView('game');
     state.isDrawer = true;
     state.currentWord = data.wordObj;

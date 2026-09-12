@@ -593,7 +593,7 @@
           this.emit('onChatMessage', packet);
           break;
         case 'WORD_CHOICES':
-          this.emit('onWordChoices', packet.choices);
+          this.emit('onWordChoices', packet.choices, packet);
           break;
         case 'ROUND_START':
           this.emit('onRoundStart', packet);
@@ -673,7 +673,8 @@
      * Send packet to a specific peer / player (from host)
      */
     sendToPeer(targetId, packet) {
-      packet.targetPlayerId = targetId;
+      const resolvedPlayerId = this.peerToPlayerId.get(targetId) || targetId;
+      packet.targetPlayerId = resolvedPlayerId;
 
       // Resolve connection by peerId or playerId
       let conn = this.connections.get(targetId);
@@ -689,7 +690,7 @@
 
       if (this.ws && this.ws.readyState === 1) {
         try {
-          this.ws.send(JSON.stringify({ action: 'TO_PEER', targetPlayerId: targetId, roomCode: this.roomCode, packet }));
+          this.ws.send(JSON.stringify({ action: 'TO_PEER', targetPlayerId: resolvedPlayerId, roomCode: this.roomCode, packet }));
         } catch (e) {}
       }
 
