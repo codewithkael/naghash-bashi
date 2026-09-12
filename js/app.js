@@ -40,6 +40,7 @@
     isDrawer: false,
     currentWord: null,
     turnTimerInterval: null,
+    roundEndTimerInterval: null,
     wordSelectionTimeout: null,
     roomsRefreshInterval: null,
     roomDiscoverySub: null,
@@ -140,9 +141,11 @@
     els.wordChoicesContainer = document.getElementById('word-choices-container');
     els.wordChoiceTimer = document.getElementById('word-choice-timer');
     els.overlayWaitingChoice = document.getElementById('overlay-waiting-choice');
+    els.waitingChoiceTimer = document.getElementById('waiting-choice-timer');
     els.overlayRoundEnd = document.getElementById('overlay-round-end');
     els.roundEndWord = document.getElementById('round-end-word');
     els.roundEndScores = document.getElementById('round-end-scores');
+    els.roundEndTimer = document.getElementById('round-end-timer');
 
     // Game Over
     els.podiumContainer = document.getElementById('podium-container');
@@ -523,6 +526,8 @@
       },
       onGameStarted: (data) => {
         showView('game');
+        clearInterval(state.roundEndTimerInterval);
+        els.overlayRoundEnd.classList.remove('active');
         SoundEngine.playTurnStart();
         notify('🎮 مسابقه آغاز شد!', 'info');
       },
@@ -832,6 +837,7 @@
     }
     state.isDrawer = false;
     state.currentWord = null;
+    clearInterval(state.roundEndTimerInterval);
     els.overlayWordChoice.classList.remove('active');
     els.overlayWaitingChoice.classList.remove('active');
     els.overlayRoundEnd.classList.remove('active');
@@ -865,6 +871,7 @@
     }
     state.isDrawer = false;
     state.currentWord = null;
+    clearInterval(state.roundEndTimerInterval);
     els.overlayWordChoice.classList.remove('active');
     els.overlayWaitingChoice.classList.remove('active');
     els.overlayRoundEnd.classList.remove('active');
@@ -1108,6 +1115,9 @@
           const drawerName = roomState.drawer ? roomState.drawer.name : 'نقاش';
           const titleEl = els.overlayWaitingChoice.querySelector('h3');
           if (titleEl) titleEl.textContent = `${drawerName} در حال انتخاب کلمه است...`;
+          if (els.waitingChoiceTimer) {
+            els.waitingChoiceTimer.textContent = roomState.timer ? toPersianDigits(roomState.timer) : '۱۵';
+          }
         }
       }
 
@@ -1145,6 +1155,8 @@
   function startWordSelectionPhaseHost() {
     state.activeBots.forEach(b => b.cancelActions());
     clearInterval(state.turnTimerInterval);
+    clearInterval(state.roundEndTimerInterval);
+    els.overlayRoundEnd.classList.remove('active');
 
     const data = state.gameRoom.startWordSelection();
     const drawer = data.drawer;
@@ -1189,6 +1201,9 @@
       els.overlayWaitingChoice.classList.add('active');
       const titleEl = els.overlayWaitingChoice.querySelector('h3');
       if (titleEl) titleEl.textContent = `${drawer.name} در حال انتخاب کلمه است...`;
+      if (els.waitingChoiceTimer) {
+        els.waitingChoiceTimer.textContent = '۱۵';
+      }
 
       state.network.sendToPeer(drawer.id, {
         type: 'WORD_CHOICES',
@@ -1212,6 +1227,8 @@
 
   function showWordChoiceModal(choices) {
     showView('game');
+    clearInterval(state.roundEndTimerInterval);
+    els.overlayRoundEnd.classList.remove('active');
     els.overlayWaitingChoice.classList.remove('active');
     els.overlayWordChoice.classList.add('active');
     if (els.wordChoiceTimer) {
@@ -1357,6 +1374,7 @@
 
   function handleRoundStart(data) {
     showView('game');
+    clearInterval(state.roundEndTimerInterval);
     els.overlayWordChoice.classList.remove('active');
     els.overlayWaitingChoice.classList.remove('active');
     els.overlayRoundEnd.classList.remove('active');
@@ -1421,6 +1439,9 @@
     if (els.wordChoiceTimer) {
       els.wordChoiceTimer.textContent = seconds;
     }
+    if (els.waitingChoiceTimer) {
+      els.waitingChoiceTimer.textContent = seconds;
+    }
     const isUrgent = seconds <= 15;
     els.turnTimer.classList.toggle('urgent', isUrgent);
 
@@ -1438,17 +1459,22 @@
 
   function handleRoundEndHost(roundEndData) {
     clearInterval(state.turnTimerInterval);
+    clearInterval(state.roundEndTimerInterval);
     state.activeBots.forEach(b => b.cancelActions());
+
+    const pauseSeconds = 5;
 
     state.network.broadcast({
       type: 'ROUND_END',
+      duration: pauseSeconds,
       ...roundEndData
     });
 
-    handleRoundEnd(roundEndData);
+    handleRoundEnd({ duration: pauseSeconds, ...roundEndData });
 
-    // After 4.5 seconds, advance to next turn or game over
+    // After pauseSeconds, advance to next turn or game over
     setTimeout(() => {
+      clearInterval(state.roundEndTimerInterval);
       const next = state.gameRoom.nextTurn();
       if (next.status === 'GAME_OVER') {
         state.network.broadcast({ type: 'GAME_OVER', podium: next.podium });
@@ -1456,7 +1482,7 @@
       } else {
         startWordSelectionPhaseHost();
       }
-    }, 4500);
+    }, pauseSeconds * 1000);
   }
 
   function handleRoundEnd(data) {
@@ -1477,11 +1503,37 @@
       els.roundEndScores.appendChild(row);
     });
 
+    // Start preparation timer countdown for next round
+    clearInterval(state.roundEndTimerInterval);
+    let secondsLeft = (typeof data.duration === 'number' && data.duration > 0) ? data.duration : 5;
+    const updateRoundEndUI = (sec) => {
+      if (els.roundEndTimer) {
+        els.roundEndTimer.textContent = toPersianDigits(sec);
+      }
+      if (els.timerText) {
+        els.timerText.textContent = toPersianDigits(sec);
+      }
+    };
+    updateRoundEndUI(secondsLeft);
+
+    state.roundEndTimerInterval = setInterval(() => {
+      secondsLeft--;
+      if (secondsLeft >= 0) {
+        updateRoundEndUI(secondsLeft);
+        if (secondsLeft <= 3 && secondsLeft > 0) {
+          SoundEngine.playTimerTick(false);
+        }
+      } else {
+        clearInterval(state.roundEndTimerInterval);
+      }
+    }, 1000);
+
     SoundEngine.playCorrectGuess();
   }
 
   function handleGameOver(data) {
     clearInterval(state.turnTimerInterval);
+    clearInterval(state.roundEndTimerInterval);
     els.overlayRoundEnd.classList.remove('active');
 
     showView('gameover');

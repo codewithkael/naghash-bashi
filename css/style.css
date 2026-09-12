@@ -1818,6 +1818,22 @@ input[type="text"]:focus {
   margin: 10px auto 14px auto;
 }
 
+.round-end-timer-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: var(--primary-soft);
+  border: 1.5px solid var(--primary);
+  color: var(--primary);
+  padding: 8px 20px;
+  border-radius: var(--radius-full);
+  font-size: 1.05rem;
+  font-weight: 800;
+  margin: 12px auto 8px auto;
+  box-shadow: 0 0 16px var(--primary-glow);
+}
+
 .word-choices-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
