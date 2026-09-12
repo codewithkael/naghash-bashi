@@ -78,7 +78,7 @@ html {
   overflow-x: hidden;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  overscroll-behavior-y: none;
+  overscroll-behavior-y: auto;
   overscroll-behavior-x: none;
 }
 
@@ -89,9 +89,9 @@ body {
   min-height: 100svh;
   min-height: -webkit-fill-available;
   overflow-x: hidden;
-  overflow-y: visible;
+  overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  overscroll-behavior-y: none;
+  overscroll-behavior-y: auto;
   overscroll-behavior-x: none;
   background-color: var(--bg-main);
   color: var(--text-main);
@@ -136,7 +136,7 @@ body {
   overflow-x: hidden;
   overflow-y: visible;
   -webkit-overflow-scrolling: touch;
-  overscroll-behavior-y: none;
+  overscroll-behavior-y: auto;
   padding-top: var(--sat);
   padding-bottom: var(--sab);
   padding-left: var(--sal);
@@ -2494,7 +2494,8 @@ input[type="text"]:focus {
   #screen-game {
     padding: 8px 10px;
     gap: 8px;
-    padding-bottom: max(16px, var(--sab));
+    padding-bottom: max(140px, calc(var(--sab) + 100px));
+    overflow-y: visible;
   }
 
   .game-top-bar {
