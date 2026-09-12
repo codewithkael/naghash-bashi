@@ -70,26 +70,40 @@
   -webkit-tap-highlight-color: transparent;
 }
 
-html, body {
+html {
+  width: 100%;
+  min-height: 100%;
+  min-height: 100dvh;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: auto;
+  overscroll-behavior-x: none;
+}
+
+body {
   width: 100%;
   min-height: 100%;
   min-height: 100dvh;
   min-height: -webkit-fill-available;
   overflow-x: hidden;
-  overflow-y: auto;
+  overflow-y: visible;
   -webkit-overflow-scrolling: touch;
-  overscroll-behavior: none;
-  overscroll-behavior-y: none;
+  overscroll-behavior-y: auto;
+  overscroll-behavior-x: none;
   background-color: var(--bg-main);
   color: var(--text-main);
   font-family: var(--font-persian);
   direction: rtl;
   text-align: right;
-  user-select: none;
-  -webkit-user-select: none;
   touch-action: manipulation;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Maintain overscroll-behavior: none on backdrop and overlay to prevent pull-to-refresh without breaking page scroll */
+.touch-controls-overlay, .drawer-backdrop {
+  overscroll-behavior: none;
 }
 
 /* Touch controls overlay rule for test & joystick compatibility */
@@ -119,7 +133,7 @@ html, body {
   flex-direction: column;
   position: relative;
   overflow-x: hidden;
-  overflow-y: auto;
+  overflow-y: visible;
   -webkit-overflow-scrolling: touch;
   padding-top: var(--sat);
   padding-bottom: var(--sab);
@@ -235,8 +249,8 @@ html, body {
 .game-screen {
   display: none;
   width: 100%;
-  flex: 1;
-  min-height: 0;
+  flex: 1 0 auto;
+  min-height: auto;
   position: relative;
 }
 
@@ -247,17 +261,16 @@ html, body {
 
 /* Scrollable Screens (Lobby, Waiting, Game, GameOver) */
 #screen-lobby, #screen-waiting, #screen-game, #screen-gameover {
-  overflow-y: auto;
+  overflow-y: visible;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
-  touch-action: pan-y;
   padding: 16px;
 }
 
 /* In-Game Arena Screen */
 #screen-game {
-  flex: 1;
-  min-height: 0;
+  flex: 1 0 auto;
+  min-height: auto;
   width: 100%;
   display: none;
   flex-direction: column;
@@ -2687,3 +2700,45 @@ input[type="text"]:focus {
     font-size: 1.15rem;
   }
 }
+
+/* ==========================================================================
+   PWA STANDALONE & MOBILE FULL-PAGE SCROLL SUPPORT
+   ========================================================================== */
+@media all and (display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui) {
+  html {
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    -webkit-overflow-scrolling: touch !important;
+    overscroll-behavior-y: auto !important;
+    height: auto !important;
+    min-height: 100% !important;
+  }
+
+  body {
+    overflow-y: visible !important;
+    overflow-x: hidden !important;
+    -webkit-overflow-scrolling: touch !important;
+    overscroll-behavior-y: auto !important;
+    height: auto !important;
+    min-height: 100dvh !important;
+  }
+
+  #app-container {
+    overflow-y: visible !important;
+    overflow-x: hidden !important;
+    height: auto !important;
+    min-height: 100dvh !important;
+  }
+
+  .game-screen,
+  #screen-lobby,
+  #screen-waiting,
+  #screen-game,
+  #screen-gameover {
+    overflow-y: visible !important;
+    overflow-x: hidden !important;
+    height: auto !important;
+    flex: 1 0 auto !important;
+  }
+}
+
