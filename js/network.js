@@ -15,13 +15,28 @@
 
   const PEER_PREFIX = 'naghash-room-';
 
+  const CLOUD_ROOM_HUBS = [
+    'https://api.restful-api.dev/objects/ff808181a067127101a0995fb5af0697',
+    'https://api.restful-api.dev/objects/ff808181a067127101a0996180460698'
+  ];
+
   // Comprehensive STUN and TURN server list to ensure connectivity across Iranian ISPs & mobile data NATs
   const RTC_CONFIG = {
     iceServers: [
-      { urls: 'stun:turn1.spacsvc.co.in:3478' },
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:stun2.l.google.com:19302' },
       { urls: 'stun:stun.cloudflare.com:3478' },
+      {
+        urls: 'turns:turn1.spacsvc.co.in:443?transport=tcp',
+        username: 'username1',
+        credential: 'password1'
+      },
+      {
+        urls: 'turn:turn1.spacsvc.co.in:443?transport=tcp',
+        username: 'username1',
+        credential: 'password1'
+      },
       {
         urls: 'turn:turn1.spacsvc.co.in:3478?transport=udp',
         username: 'username1',
@@ -29,11 +44,6 @@
       },
       {
         urls: 'turn:turn1.spacsvc.co.in:3478?transport=tcp',
-        username: 'username1',
-        credential: 'password1'
-      },
-      {
-        urls: 'turns:turn1.spacsvc.co.in:443?transport=tcp',
         username: 'username1',
         credential: 'password1'
       }
@@ -262,13 +272,20 @@
       }
     }
 
-    attemptDataConnection(hostPeerId, guestPlayer, resolvePromise) {
+    attemptDataConnection(hostPeerId, guestPlayer, resolvePromise, attempt = 1, maxAttempts = 3) {
       if (this.isDestroyed) return;
 
+      const progressMessages = [
+        'در حال اتصال به اتاق مسابقه...',
+        'در حال برقراری اتصال مستقیم (تلاش ۲)...',
+        'در حال عبور از فایروال و اتصال امن (تلاش ۳)...'
+      ];
+      const message = progressMessages[attempt - 1] || `در حال تلاش مجدد برای اتصال (تلاش ${attempt})...`;
+
       this.emit('onConnecting', {
-        attempt: 1,
-        max: 1,
-        message: 'در حال اتصال به اتاق مسابقه...'
+        attempt,
+        max: maxAttempts,
+        message
       });
 
       try {
@@ -276,53 +293,100 @@
           reliable: true
         });
 
-        const connTimeout = setTimeout(() => {
-          if (!this.hostConn) {
-            console.log('Connection timeout, falling back to local channel if available');
-            try { conn.close(); } catch (_) {}
+        let isOpened = false;
+        let attemptTimer = null;
+        let backupJoinTimer = null;
+
+        const cleanup = () => {
+          if (attemptTimer) { clearTimeout(attemptTimer); attemptTimer = null; }
+          if (backupJoinTimer) { clearTimeout(backupJoinTimer); backupJoinTimer = null; }
+        };
+
+        const tryNextAttempt = () => {
+          cleanup();
+          if (isOpened || this.isDestroyed || this.hostConn) return;
+          try { conn.close(); } catch (_) {}
+
+          if (attempt < maxAttempts) {
+            console.log(`Connection attempt ${attempt} failed, retrying (${attempt + 1}/${maxAttempts})...`);
+            setTimeout(() => {
+              if (!this.isDestroyed && !this.hostConn) {
+                this.attemptDataConnection(hostPeerId, guestPlayer, resolvePromise, attempt + 1, maxAttempts);
+              }
+            }, 800);
+          } else {
+            console.log('All connection attempts failed, falling back to local channel if available');
             this.sendLocalBroadcast({ type: 'JOIN', player: guestPlayer });
             if (resolvePromise) resolvePromise(false);
           }
-        }, 5000);
+        };
+
+        // Generous 8.5s timeout for STUN/TURNS gathering and connection establishment
+        attemptTimer = setTimeout(() => {
+          if (!isOpened && !this.hostConn) {
+            tryNextAttempt();
+          }
+        }, 8500);
 
         conn.on('open', () => {
-          clearTimeout(connTimeout);
+          isOpened = true;
+          cleanup();
           console.log('Connected to host peer:', hostPeerId);
           this.hostConn = conn;
           this.lastHostActivity = Date.now();
 
-          // Send clean JOIN packet once
+          // Send clean JOIN packet immediately
           this.sendToHost({
             type: 'JOIN',
             player: guestPlayer
           });
+
+          // Backup join packet 800ms later in case initial frame dropped before buffer ready
+          backupJoinTimer = setTimeout(() => {
+            if (!this.isDestroyed && this.hostConn && this.hostConn.open) {
+              this.sendToHost({
+                type: 'JOIN',
+                player: guestPlayer
+              });
+            }
+          }, 800);
 
           if (resolvePromise) resolvePromise(true);
         });
 
         conn.on('data', (data) => {
           this.lastHostActivity = Date.now();
+          cleanup();
           this.handlePacket(data);
         });
 
         conn.on('close', () => {
-          clearTimeout(connTimeout);
+          cleanup();
           console.log('Connection to host closed');
+          const wasConnected = !!this.hostConn;
           this.hostConn = null;
-          this.emit('onError', 'ارتباط با میزبان بازی قطع شد. لطفاً وضعیت اتاق را بررسی کنید.');
-          this.emit('onPlayerLeft', 'host');
+          if (wasConnected) {
+            this.emit('onError', 'ارتباط با میزبان بازی قطع شد. لطفاً وضعیت اتاق را بررسی کنید.');
+            this.emit('onPlayerLeft', 'host');
+          } else {
+            tryNextAttempt();
+          }
         });
 
         conn.on('error', (err) => {
-          clearTimeout(connTimeout);
-          console.warn('Guest conn error:', err);
-          this.sendLocalBroadcast({ type: 'JOIN', player: guestPlayer });
-          if (resolvePromise) resolvePromise(false);
+          console.warn(`Guest conn error on attempt ${attempt}:`, err);
+          tryNextAttempt();
         });
       } catch (e) {
         console.warn('attemptDataConnection exception:', e);
-        this.sendLocalBroadcast({ type: 'JOIN', player: guestPlayer });
-        if (resolvePromise) resolvePromise(false);
+        if (attempt < maxAttempts) {
+          setTimeout(() => {
+            this.attemptDataConnection(hostPeerId, guestPlayer, resolvePromise, attempt + 1, maxAttempts);
+          }, 800);
+        } else {
+          this.sendLocalBroadcast({ type: 'JOIN', player: guestPlayer });
+          if (resolvePromise) resolvePromise(false);
+        }
       }
     }
 
@@ -743,15 +807,9 @@
         }
 
         // 4. Global cloud discovery (serverless cross-device on GitHub Pages)
-        if (typeof fetch !== 'undefined') {
-          try {
-            fetch('https://ntfy.sh/naghashbashi_public_rooms_v1', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ action: 'ROOM_ANNOUNCE', room: this.roomAnnounceData })
-            }).catch(() => {});
-          } catch (_) {}
-        }
+        NetworkManager.syncToCloudHub((rooms) => {
+          rooms[this.roomAnnounceData.roomCode] = this.roomAnnounceData;
+        });
       };
 
       broadcastAnnounce();
@@ -780,15 +838,9 @@
         } catch (_) {}
       }
 
-      if (typeof fetch !== 'undefined') {
-        try {
-          fetch('https://ntfy.sh/naghashbashi_public_rooms_v1', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'ROOM_ANNOUNCE', room: this.roomAnnounceData })
-          }).catch(() => {});
-        } catch (_) {}
-      }
+      NetworkManager.syncToCloudHub((rooms) => {
+        rooms[this.roomAnnounceData.roomCode] = this.roomAnnounceData;
+      });
     }
 
     stopDiscoveryBroadcast() {
@@ -821,15 +873,9 @@
           } catch (_) {}
         }
 
-        if (typeof fetch !== 'undefined') {
-          try {
-            fetch('https://ntfy.sh/naghashbashi_public_rooms_v1', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ action: 'ROOM_CLOSED', roomCode })
-            }).catch(() => {});
-          } catch (_) {}
-        }
+        NetworkManager.syncToCloudHub((rooms) => {
+          delete rooms[roomCode];
+        });
       }
 
       if (this.discoveryBc) {
@@ -839,38 +885,95 @@
       this.roomAnnounceData = null;
     }
 
+    static async syncToCloudHub(mutateFn) {
+      if (typeof fetch === 'undefined') return;
+
+      for (const hubUrl of CLOUD_ROOM_HUBS) {
+        try {
+          const getCtrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+          const getTimer = getCtrl ? setTimeout(() => getCtrl.abort(), 2400) : null;
+          const res = await fetch(hubUrl, {
+            signal: getCtrl ? getCtrl.signal : undefined,
+            cache: 'no-store'
+          });
+          if (getTimer) clearTimeout(getTimer);
+
+          let currentData = {};
+          if (res.ok) {
+            const json = await res.json();
+            if (json && json.data && typeof json.data === 'object') {
+              currentData = json.data;
+            }
+          }
+
+          const now = Date.now();
+          const cleanRooms = {};
+          Object.keys(currentData).forEach((code) => {
+            const r = currentData[code];
+            if (r && (now - (r.updatedAt || 0) < 22000)) {
+              cleanRooms[code] = r;
+            }
+          });
+
+          if (typeof mutateFn === 'function') {
+            mutateFn(cleanRooms);
+          }
+
+          const putCtrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+          const putTimer = putCtrl ? setTimeout(() => putCtrl.abort(), 2400) : null;
+          await fetch(hubUrl, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: 'naghashbashi_active_rooms_hub',
+              data: cleanRooms
+            }),
+            signal: putCtrl ? putCtrl.signal : undefined
+          });
+          if (putTimer) clearTimeout(putTimer);
+
+          break;
+        } catch (_) {}
+      }
+    }
+
     static async fetchRemoteActiveRooms() {
       if (typeof fetch === 'undefined') return NetworkManager.getActiveRooms();
 
-      try {
-        const res = await fetch('https://ntfy.sh/naghashbashi_public_rooms_v1/json?poll=1&since=40s', {
-          cache: 'no-store'
-        });
-        if (res.ok) {
-          const text = await res.text();
-          const lines = text.split('\n').filter(Boolean);
-          if (typeof localStorage !== 'undefined') {
-            const raw = localStorage.getItem('naghash_active_rooms');
-            const roomsMap = raw ? JSON.parse(raw) : {};
+      for (const hubUrl of CLOUD_ROOM_HUBS) {
+        try {
+          const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+          const timer = controller ? setTimeout(() => controller.abort(), 2500) : null;
+          const res = await fetch(hubUrl, {
+            signal: controller ? controller.signal : undefined,
+            cache: 'no-store'
+          });
+          if (timer) clearTimeout(timer);
 
-            lines.forEach((line) => {
-              try {
-                const item = JSON.parse(line);
-                if (item.event === 'message' && item.message) {
-                  const payload = JSON.parse(item.message);
-                  if (payload.action === 'ROOM_ANNOUNCE' && payload.room && payload.room.roomCode) {
-                    roomsMap[payload.room.roomCode] = payload.room;
-                  } else if (payload.action === 'ROOM_CLOSED' && payload.roomCode) {
-                    delete roomsMap[payload.roomCode];
-                  }
+          if (res.ok) {
+            const json = await res.json();
+            const data = json && json.data && typeof json.data === 'object' ? json.data : {};
+            const now = Date.now();
+
+            if (typeof localStorage !== 'undefined') {
+              const raw = localStorage.getItem('naghash_active_rooms');
+              const roomsMap = raw ? JSON.parse(raw) : {};
+
+              Object.keys(data).forEach((code) => {
+                const r = data[code];
+                if (r && r.roomCode && (now - (r.updatedAt || 0) < 18000)) {
+                  roomsMap[r.roomCode] = r;
+                } else {
+                  delete roomsMap[code];
                 }
-              } catch (_) {}
-            });
+              });
 
-            localStorage.setItem('naghash_active_rooms', JSON.stringify(roomsMap));
+              localStorage.setItem('naghash_active_rooms', JSON.stringify(roomsMap));
+            }
+            break;
           }
-        }
-      } catch (_) {}
+        } catch (_) {}
+      }
 
       return NetworkManager.getActiveRooms();
     }
@@ -944,42 +1047,7 @@
         }, 3500);
       }
 
-      // 1. Cloud WebSocket discovery for GitHub Pages / cross-device play
-      let cloudWs = null;
-      if (typeof WebSocket !== 'undefined') {
-        try {
-          cloudWs = new WebSocket('wss://ntfy.sh/naghashbashi_public_rooms_v1/ws?since=30s');
-          cloudWs.onmessage = (evt) => {
-            try {
-              const data = JSON.parse(evt.data);
-              if (data.event === 'message' && data.message) {
-                const payload = JSON.parse(data.message);
-                if (payload.action === 'ROOM_ANNOUNCE' && payload.room) {
-                  if (typeof localStorage !== 'undefined') {
-                    const raw = localStorage.getItem('naghash_active_rooms');
-                    const map = raw ? JSON.parse(raw) : {};
-                    map[payload.room.roomCode] = payload.room;
-                    localStorage.setItem('naghash_active_rooms', JSON.stringify(map));
-                  }
-                  callback(NetworkManager.getActiveRooms());
-                } else if (payload.action === 'ROOM_CLOSED' && payload.roomCode) {
-                  if (typeof localStorage !== 'undefined') {
-                    const raw = localStorage.getItem('naghash_active_rooms');
-                    if (raw) {
-                      const map = JSON.parse(raw);
-                      delete map[payload.roomCode];
-                      localStorage.setItem('naghash_active_rooms', JSON.stringify(map));
-                    }
-                  }
-                  callback(NetworkManager.getActiveRooms());
-                }
-              }
-            } catch (_) {}
-          };
-        } catch (_) {}
-      }
-
-      // 2. WebSocket relay discovery when running via server.js
+      // WebSocket relay discovery when running via server.js
       let discoveryWs = null;
       if (typeof window !== 'undefined' && window.location && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || (window.location.port && window.location.hostname !== 'github.io'))) {
         try {
@@ -1035,10 +1103,6 @@
           }
           if (typeof window !== 'undefined') {
             window.removeEventListener('storage', storageListener);
-          }
-          if (cloudWs) {
-            try { cloudWs.close(); } catch (_) {}
-            cloudWs = null;
           }
           if (discoveryWs) {
             try { discoveryWs.close(); } catch (_) {}
