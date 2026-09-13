@@ -1,7 +1,7 @@
 {
   "name": "نقاشباشی - بازی آنلاین حدس نقاشی",
   "short_name": "نقاشباشی",
-  "description": "بازی آنلاین چندنفره و مهیج حدس نقاشی (Doodle Kong / Skribbl) به زبان فارسی برای ۲ تا ۶ بازیکن",
+  "description": "بازی آنلاین چندنفره و مهیج حدس نقاشی (Doodle Kong / Skribbl) به زبان فارسی برای ۲ تا ۸ بازیکن",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#0f172a",
