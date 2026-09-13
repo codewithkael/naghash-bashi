@@ -2173,10 +2173,43 @@
 
     showView('lobby');
 
-    // Register Service Worker for PWA
+    // Purge any legacy stale caches
+    if (typeof caches !== 'undefined') {
+      caches.keys().then((keys) => {
+        keys.forEach((key) => {
+          if (key.includes('-v1') || key !== 'naghash-bashi-v2') {
+            caches.delete(key);
+          }
+        });
+      }).catch(() => {});
+    }
+
+    // Register & aggressively update Service Worker for PWA
     if ('serviceWorker' in navigator && window.location.protocol.startsWith('http')) {
-      navigator.serviceWorker.register('./sw.js').catch((err) => {
+      navigator.serviceWorker.register('./sw.js').then((reg) => {
+        // Force check for updated sw.js on every load
+        try { reg.update(); } catch (_) {}
+
+        reg.addEventListener('updatefound', () => {
+          const newWorker = reg.installing;
+          if (newWorker) {
+            newWorker.addEventListener('statechange', () => {
+              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                newWorker.postMessage({ type: 'SKIP_WAITING' });
+              }
+            });
+          }
+        });
+      }).catch((err) => {
         console.warn('SW registration failed:', err);
+      });
+
+      let refreshing = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!refreshing) {
+          refreshing = true;
+          window.location.reload();
+        }
       });
     }
 
