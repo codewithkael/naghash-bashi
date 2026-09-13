@@ -363,7 +363,7 @@
       }
 
       const evalResult = WordBank.checkGuess(guessText, this.currentWord.word);
-      const isWordMatch = evalResult.isCorrect || (normTarget.length >= 3 && normGuess.includes(normTarget));
+      const isWordMatch = evalResult.isCorrect || (normTarget.length >= 2 && normGuess.includes(normTarget));
 
       if (isWordMatch) {
         player.guessedThisRound = true;

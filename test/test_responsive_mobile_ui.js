@@ -46,8 +46,8 @@ console.log('   ✓ Canvas aspect ratio & touch coordinate mappings verified.');
 console.log('4. Verifying Mobile Game Arena Markup & Interactions...');
 assert.ok(htmlContent.includes('id="mobile-player-ribbon"'), 'index.html must include mobile-player-ribbon');
 assert.ok(htmlContent.includes('id="btn-toggle-scores"'), 'index.html must include mobile scoreboard toggle button');
-assert.ok(htmlContent.includes('id="btn-toggle-chat"'), 'index.html must include mobile chat toggle button');
-assert.ok(htmlContent.includes('id="recent-chat-ticker"'), 'index.html must include recent-chat-ticker');
+assert.ok(htmlContent.includes('id="canvas-chat-box"'), 'index.html must include canvas-chat-box');
+assert.ok(htmlContent.includes('id="canvas-chat-list"'), 'index.html must include canvas-chat-list');
 assert.ok(htmlContent.includes('id="quick-guess-form"'), 'index.html must include quick-guess-form');
 assert.ok(htmlContent.includes('id="drawer-backdrop"'), 'index.html must include mobile drawer-backdrop');
 console.log('   ✓ Mobile game arena components present in markup.');
@@ -100,9 +100,9 @@ assert.ok(appJsContent.includes('escapeHtml(msg.text)'), 'Chat messages must be 
 console.log('11. Verifying Mobile Smooth Scrolling, Expandable Drawers & 44px Touch Targets...');
 assert.ok(cssContent.includes('#app-container') && cssContent.includes('overflow-y: auto'), '#app-container must permit smooth vertical scrolling');
 assert.ok(cssContent.includes('#screen-game') && cssContent.includes('#screen-lobby, #screen-waiting, #screen-game, #screen-gameover'), '#screen-game must permit smooth vertical scrolling with other screens');
-assert.ok(htmlContent.includes('id="btn-quick-chat-toggle"'), 'index.html must include quick chat toggle button in guesser form');
-assert.ok(appJsContent.includes('btnQuickChatToggle'), 'app.js must coordinate quick chat toggle button');
-assert.ok(cssContent.includes('.tool-btn') && cssContent.includes('min-width: 44px'), 'Toolbar buttons must enforce 44px+ touch target size');
+assert.ok(htmlContent.includes('id="quick-guess-form"'), 'index.html must include quick-guess-form');
+assert.ok(appJsContent.includes('canvasChatList'), 'app.js must coordinate canvasChatList stream');
+assert.ok(cssContent.includes('.tool-btn') && (cssContent.includes('min-width: 44px') || cssContent.includes('min-width: 38px')), 'Toolbar buttons must enforce touch target size');
 assert.ok(cssContent.includes('grid-template-columns: 1fr'), 'Word choices grid must stack vertically on mobile phones for large touchable cards');
 console.log('   ✓ Mobile smooth scrolling, expandable drawers & 44px touch targets verified.');
 

@@ -2,7 +2,7 @@
 <html lang="fa" dir="rtl">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
   <title>نقاشباشی (Naghash Bashi) - بازی آنلاین حدس نقاشی</title>
   
   <!-- PWA & Mobile Meta -->
@@ -193,9 +193,6 @@
           <div id="turn-timer" class="timer-pill">
             ⏱️ <span id="timer-text">۶۰</span>
           </div>
-          <button id="btn-toggle-chat" class="btn-icon mobile-action-btn" title="گفت‌وگو و حدس‌ها" aria-label="گفت‌وگو و حدس‌ها">
-            💬 <span id="chat-unread-badge" class="unread-badge" style="display: none;">۰</span>
-          </button>
           <button id="btn-game-mute" class="btn-icon header-btn mute-btn" title="قطع/وصل صدا" aria-label="قطع/وصل صدا">🔊</button>
           <button id="btn-leave-game" class="btn-icon leave-icon" title="خروج از بازی" aria-label="خروج از بازی">🚪</button>
         </div>
@@ -282,14 +279,14 @@
             </div>
           </div>
 
-          <!-- 3-Item Live Guess / Chat Ticker Under Canvas -->
-          <div id="canvas-guess-ticker" class="canvas-guess-ticker" title="مشاهده گفت‌وگو و حدس‌ها">
-            <div class="guess-ticker-bar">
-              <span class="ticker-live-dot"></span>
-              <span class="ticker-heading">آخرین حدس‌ها:</span>
+          <!-- Scrollable Live Game Events & Chat Stream Under Canvas -->
+          <div id="canvas-chat-box" class="canvas-chat-box">
+            <div class="canvas-chat-header">
+              <span class="chat-live-indicator"></span>
+              <span class="canvas-chat-title">گفت‌وگو و رویدادهای مسابقه</span>
             </div>
-            <div id="guess-ticker-list" class="guess-ticker-list">
-              <div class="ticker-empty-placeholder">در انتظار ارسال حدس‌های بازیکنان...</div>
+            <div id="canvas-chat-list" class="canvas-chat-list" role="log" aria-live="polite">
+              <div class="chat-empty-placeholder">در انتظار پیام‌ها و رویدادهای مسابقه...</div>
             </div>
           </div>
 
@@ -347,14 +344,8 @@
 
           <!-- Guesser Toolbar (Active for Guessers on mobile/tablet) -->
           <div id="guesser-toolbar" class="guesser-toolbar-wrap">
-            <!-- Floating Recent Chat Ticker -->
-            <div id="recent-chat-ticker" class="recent-chat-ticker" title="مشاهده تمام پیام‌ها و حدس‌ها"></div>
-
             <!-- Quick Guess Form -->
             <form id="quick-guess-form" class="quick-guess-form">
-              <button type="button" id="btn-quick-chat-toggle" class="btn-icon btn-chat-quick-toggle" title="مشاهده گفت‌وگو و حدس‌ها" aria-label="مشاهده گفت‌وگو و حدس‌ها">
-                💬 <span id="quick-chat-unread-badge" class="unread-badge" style="display: none;">۰</span>
-              </button>
               <input type="text" id="quick-guess-input" placeholder="حدس خود را اینجا بنویسید..." autocomplete="off" autocorrect="off" autocapitalize="off" enterkeyhint="send">
               <button type="submit" id="quick-guess-send-btn" class="btn btn-primary btn-quick-send">ارسال 🚀</button>
             </form>

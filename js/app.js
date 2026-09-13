@@ -121,14 +121,17 @@
     els.btnClear = document.getElementById('tool-clear');
     els.btnUndo = document.getElementById('tool-undo');
 
-    // Guesser Toolbar & Live Ticker
+    // Guesser Toolbar
     els.guesserToolbar = document.getElementById('guesser-toolbar');
-    els.recentChatTicker = document.getElementById('recent-chat-ticker');
     els.quickGuessForm = document.getElementById('quick-guess-form');
     els.btnQuickChatToggle = document.getElementById('btn-quick-chat-toggle');
     els.quickChatUnreadBadge = document.getElementById('quick-chat-unread-badge');
     els.quickGuessInput = document.getElementById('quick-guess-input');
     els.quickGuessSendBtn = document.getElementById('quick-guess-send-btn');
+
+    // Canvas Live Chat & Events Stream
+    els.canvasChatBox = document.getElementById('canvas-chat-box');
+    els.canvasChatList = document.getElementById('canvas-chat-list');
 
     // Chat
     els.chatMessages = document.getElementById('chat-messages');
@@ -364,6 +367,9 @@
         localStorage.removeItem('naghash_active_session');
       }
     } catch (_) {}
+    if (els.canvasChatList) {
+      els.canvasChatList.innerHTML = '<div class="chat-empty-placeholder">در انتظار پیام‌ها و رویدادهای مسابقه...</div>';
+    }
   }
 
   // --- Dedicated Word Bar Controller ---
@@ -1433,8 +1439,13 @@
 
     updateInputState();
 
-    if (els.guessTickerList) {
-      els.guessTickerList.innerHTML = '<div class="ticker-empty-placeholder">در انتظار ارسال حدس‌های بازیکنان...</div>';
+    if (els.canvasChatList) {
+      const divider = document.createElement('div');
+      divider.className = 'canvas-chat-divider';
+      const roundNum = state.gameRoom ? state.gameRoom.currentRound : (data.round || 1);
+      divider.innerHTML = `<span>── نوبت ${escapeHtml(data.drawerName || 'نقاش')} (دور ${toPersianDigits(roundNum)}) ──</span>`;
+      els.canvasChatList.appendChild(divider);
+      els.canvasChatList.scrollTop = els.canvasChatList.scrollHeight;
     }
 
     SoundEngine.playTurnStart();
@@ -1699,61 +1710,37 @@
       els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
     }
 
-    // 2. 3-Item Live Scrolling Guess / Chat Ticker Under Canvas
-    if (els.guessTickerList) {
-      const placeholder = els.guessTickerList.querySelector('.ticker-empty-placeholder');
+    // 2. Append to Scrollable Game Events & Chat Stream under Canvas
+    if (els.canvasChatList) {
+      const placeholder = els.canvasChatList.querySelector('.chat-empty-placeholder');
       if (placeholder) {
         placeholder.remove();
       }
 
       const row = document.createElement('div');
-      row.className = 'guess-ticker-row' + (msg.isCorrect ? ' correct' : (msg.isSystem ? ' system' : ''));
+      const isClose = msg.text && typeof msg.text === 'string' && msg.text.includes('نزدیک بود');
+      row.className = 'canvas-chat-row' +
+        (msg.isCorrect ? ' correct' : '') +
+        (isClose ? ' close' : '') +
+        (msg.isSystem && !msg.isCorrect ? ' system' : '');
 
       if (msg.isCorrect) {
-        row.innerHTML = `<span class="ticker-sender">🎉 ${escapeHtml(msg.sender || 'سیستم')}:</span> <span class="ticker-text">${escapeHtml(msg.text)}</span>`;
+        row.innerHTML = `<span class="chat-row-sender">🎉 ${escapeHtml(msg.sender || 'سیستم')}:</span> <span class="chat-row-text">${escapeHtml(msg.text)}</span>`;
       } else if (msg.isSystem) {
-        row.innerHTML = `<span class="ticker-sender">${escapeHtml(msg.avatar || '📢')}</span> <span class="ticker-text">${escapeHtml(msg.text)}</span>`;
+        row.innerHTML = `<span class="chat-row-sender">${escapeHtml(msg.avatar || '📢')}</span> <span class="chat-row-text">${escapeHtml(msg.text)}</span>`;
       } else {
-        row.innerHTML = `<span class="ticker-sender">${escapeHtml(msg.avatar || '💬')} ${escapeHtml(msg.sender)}:</span> <span class="ticker-text">${escapeHtml(msg.text)}</span>`;
+        row.innerHTML = `<span class="chat-row-sender">${escapeHtml(msg.avatar || '💬')} ${escapeHtml(msg.sender)}:</span> <span class="chat-row-text">${escapeHtml(msg.text)}</span>`;
       }
 
-      els.guessTickerList.appendChild(row);
+      els.canvasChatList.appendChild(row);
 
-      // Keep strictly max 3 items in the ticker
-      while (els.guessTickerList.children.length > 3) {
-        els.guessTickerList.removeChild(els.guessTickerList.firstChild);
-      }
-      els.guessTickerList.scrollTop = els.guessTickerList.scrollHeight;
-    }
-
-    // 3. Floating Live Ticker above Guesser Input
-    if (els.recentChatTicker) {
-      const tickerItem = document.createElement('div');
-      tickerItem.className = 'ticker-item' + (msg.isCorrect ? ' correct' : '');
-      if (msg.isSystem) {
-        tickerItem.innerHTML = `<span>${escapeHtml(msg.avatar || '📢')}</span> <span>${escapeHtml(msg.text)}</span>`;
-      } else {
-        tickerItem.innerHTML = `<strong>${escapeHtml(msg.avatar || '')} ${escapeHtml(msg.sender)}:</strong> <span>${escapeHtml(msg.text)}</span>`;
-      }
-      els.recentChatTicker.appendChild(tickerItem);
-
-      // Keep max 2 items in ticker
-      while (els.recentChatTicker.children.length > 2) {
-        els.recentChatTicker.removeChild(els.recentChatTicker.firstChild);
+      // Keep recent 80 items so list remains fast and fully scrollable
+      while (els.canvasChatList.children.length > 80) {
+        els.canvasChatList.removeChild(els.canvasChatList.firstChild);
       }
 
-      setTimeout(() => {
-        if (tickerItem.parentNode) {
-          tickerItem.style.opacity = '0';
-          tickerItem.style.transform = 'translateY(-6px)';
-          tickerItem.style.transition = 'all 0.3s ease';
-          setTimeout(() => {
-            if (tickerItem.parentNode) {
-              tickerItem.parentNode.removeChild(tickerItem);
-            }
-          }, 300);
-        }
-      }, 4000);
+      // Smooth scroll down to latest message
+      els.canvasChatList.scrollTop = els.canvasChatList.scrollHeight;
     }
 
     // 3. Unread badge for mobile chat button if chat sheet is closed
@@ -2054,6 +2041,20 @@
       els.quickGuessForm.addEventListener('submit', (e) => {
         e.preventDefault();
         submitGuess(els.quickGuessInput ? els.quickGuessInput.value : '');
+      });
+    }
+
+    if (els.quickGuessInput) {
+      els.quickGuessInput.addEventListener('focus', () => {
+        setTimeout(() => {
+          els.quickGuessInput.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }, 150);
+      });
+    }
+
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', () => {
+        document.documentElement.style.setProperty('--vvh', `${window.visualViewport.height}px`);
       });
     }
 
