@@ -6,7 +6,7 @@
   <title>نقاشباشی (Naghash Bashi) - بازی آنلاین حدس نقاشی</title>
   
   <!-- PWA & Mobile Meta -->
-  <meta name="description" content="بازی آنلاین چندنفره و مهیج حدس نقاشی (Doodle Kong / Skribbl) به زبان فارسی با قابلیت بازی در اتاق‌های ۲ تا ۶ نفره و نسخه PWA">
+  <meta name="description" content="بازی آنلاین چندنفره و مهیج حدس نقاشی (Doodle Kong / Skribbl) به زبان فارسی با قابلیت بازی در اتاق‌های ۲ تا ۸ نفره و نسخه PWA">
   <meta name="theme-color" content="#f59e0b">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -25,7 +25,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700;900&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="css/style.css?v=2.1.0">
+  <link rel="stylesheet" href="css/style.css?v=2.2.0">
 </head>
 <body>
   <!-- Confetti Canvas overlay -->
@@ -145,10 +145,10 @@
               <button id="btn-copy-link" class="btn-icon btn-chip" title="کپی لینک مستقیم دعوت">🔗 کپی لینک دعوت</button>
             </div>
           </div>
-          <span class="capacity-info">ظرفیت اتاق: <strong id="waiting-count">۱ از ۶ نفر</strong></span>
+          <span class="capacity-info">ظرفیت اتاق: <strong id="waiting-count">۱ از ۸ نفر</strong></span>
         </div>
 
-        <!-- 6 Player Slots -->
+        <!-- 8 Player Slots -->
         <div class="slots-container">
           <h3 class="section-title">بازیکنان حاضر در اتاق</h3>
           <div id="waiting-player-slots" class="slots-grid"></div>
@@ -206,6 +206,7 @@
       <!-- Dedicated Word Display Bar (Directly Above Canvas / Arena) -->
       <div id="game-word-bar" class="game-word-bar" role="region" aria-label="کلمه بازی">
         <div class="word-info-wrap">
+          <span id="word-drawer-badge" class="drawer-badge" style="display: none;"></span>
           <div id="word-display" class="masked-word">_ _ _ _</div>
           <span id="word-category-badge" class="category-badge">دسته‌بندی: عمومی</span>
         </div>
@@ -405,13 +406,13 @@
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 
   <!-- Application Logic Modules (Cache-busted for instant live deployment updates) -->
-  <script src="js/profanity.js?v=2.1.0"></script>
-  <script src="js/words.js?v=2.1.0"></script>
-  <script src="js/room_logic.js?v=2.1.0"></script>
-  <script src="js/canvas.js?v=2.1.0"></script>
-  <script src="js/network.js?v=2.1.0"></script>
-  <script src="js/audio.js?v=2.1.0"></script>
-  <script src="js/confetti.js?v=2.1.0"></script>
-  <script src="js/app.js?v=2.1.0"></script>
+  <script src="js/profanity.js?v=2.2.0"></script>
+  <script src="js/words.js?v=2.2.0"></script>
+  <script src="js/room_logic.js?v=2.2.0"></script>
+  <script src="js/canvas.js?v=2.2.0"></script>
+  <script src="js/network.js?v=2.2.0"></script>
+  <script src="js/audio.js?v=2.2.0"></script>
+  <script src="js/confetti.js?v=2.2.0"></script>
+  <script src="js/app.js?v=2.2.0"></script>
 </body>
 </html>

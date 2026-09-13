@@ -10,20 +10,20 @@ assert.strictEqual(room.players[0].isHost, true);
 assert.strictEqual(room.status, 'LOBBY');
 console.log('✓ Room creation & host assignment verified.');
 
-// 2. Add players up to 6
-for (let i = 2; i <= 6; i++) {
+// 2. Add players up to 8
+for (let i = 2; i <= MAX_PLAYERS; i++) {
   const res = room.addPlayer({ id: `p${i}`, name: `بازیکن ${i}`, avatar: '🦁' });
   assert.strictEqual(res.success, true, `Player ${i} should be added`);
 }
-assert.strictEqual(room.players.length, 6);
-console.log('✓ Successfully joined 6 players.');
+assert.strictEqual(room.players.length, 8);
+console.log('✓ Successfully joined 8 players.');
 
-// 3. Attempt to add 7th player (Strict 6 player capacity enforcement)
-const seventh = room.addPlayer({ id: 'p7', name: 'بازیکن اضافه', avatar: '🤖' });
-assert.strictEqual(seventh.success, false, '7th player must be rejected');
-assert.strictEqual(seventh.error, 'ROOM_FULL', 'Error must be ROOM_FULL');
-assert.strictEqual(room.players.length, 6, 'Room capacity must remain at 6');
-console.log('✓ 6-player limit strictly enforced.');
+// 3. Attempt to add 9th player (Strict 8 player capacity enforcement)
+const ninth = room.addPlayer({ id: 'p9', name: 'بازیکن اضافه', avatar: '🤖' });
+assert.strictEqual(ninth.success, false, '9th player must be rejected');
+assert.strictEqual(ninth.error, 'ROOM_FULL', 'Error must be ROOM_FULL');
+assert.strictEqual(room.players.length, 8, 'Room capacity must remain at 8');
+console.log('✓ 8-player limit strictly enforced.');
 
 // 4. Test Profanity Filter rejection in room join
 const badRoom = new GameRoom('NB-999', { id: 'h1', name: 'میزبان', avatar: '👑' });
@@ -76,10 +76,10 @@ const chatAfterGuess = room.submitGuess('p2', 'من حدس زدم!');
 assert.strictEqual(chatAfterGuess.type, 'ALREADY_GUESSED');
 
 // 9. All remaining players guess -> round ends immediately
-for (let i = 3; i <= 6; i++) {
+for (let i = 3; i <= MAX_PLAYERS; i++) {
   const g = room.submitGuess(`p${i}`, chosenWord.word);
   assert.strictEqual(g.type, 'CORRECT');
-  if (i === 6) {
+  if (i === MAX_PLAYERS) {
     assert.strictEqual(g.allGuessed, true, 'All guessers finished, round must end early');
     assert.strictEqual(room.status, 'ROUND_END');
   }

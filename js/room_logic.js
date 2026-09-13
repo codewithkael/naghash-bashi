@@ -14,7 +14,7 @@
   }
 })(typeof self !== 'undefined' ? self : this, function (WordBank, ProfanityFilter) {
 
-  const MAX_PLAYERS = 6;
+  const MAX_PLAYERS = 8;
   const MIN_PLAYERS = 2;
   const WORD_SELECT_TIME = 15; // seconds
   const DRAWING_TIME = 60;     // seconds
@@ -66,7 +66,7 @@
       }
 
       if (this.players.length >= this.maxPlayers) {
-        return { success: false, error: 'ROOM_FULL', message: 'ظرفیت اتاق تکمیل است (حداکثر ۶ نفر).' };
+        return { success: false, error: 'ROOM_FULL', message: 'ظرفیت اتاق تکمیل است (حداکثر ۸ نفر).' };
       }
 
       // Reject new players if game has already started

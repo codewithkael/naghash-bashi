@@ -142,7 +142,7 @@
         hostName: hostPlayer.name,
         hostAvatar: hostPlayer.avatar || '🎨',
         playerCount: 1,
-        maxPlayers: 6,
+        maxPlayers: 8,
         status: 'LOBBY'
       });
 
@@ -767,7 +767,7 @@
         hostName: roomData.hostName,
         hostAvatar: roomData.hostAvatar || '🎨',
         playerCount: roomData.playerCount || 1,
-        maxPlayers: roomData.maxPlayers || 6,
+        maxPlayers: roomData.maxPlayers || 8,
         status: roomData.status || 'LOBBY',
         updatedAt: Date.now()
       };

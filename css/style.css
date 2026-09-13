@@ -917,7 +917,7 @@ input[type="text"]:focus {
 
 .slots-grid {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 8px;
   margin-top: 8px;
 }
@@ -1132,6 +1132,33 @@ input[type="text"]:focus {
   border-radius: var(--radius-full);
   border: 1px solid var(--border-subtle);
   white-space: nowrap;
+  display: inline-block;
+}
+
+.drawer-badge {
+  font-size: 0.88rem;
+  font-weight: 800;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.14);
+  border: 1.5px solid rgba(56, 189, 248, 0.4);
+  padding: 3px 12px;
+  border-radius: var(--radius-full);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.2);
+  white-space: nowrap;
+}
+
+.drawer-active-tag {
+  color: #fbbf24;
+  font-size: 0.76rem;
+  font-weight: 800;
+  background: rgba(245, 158, 11, 0.18);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  padding: 2px 7px;
+  border-radius: var(--radius-full);
+  margin-right: 4px;
   display: inline-block;
 }
 
@@ -2398,6 +2425,11 @@ input[type="text"]:focus {
     letter-spacing: normal;
   }
 
+  .game-word-bar .drawer-badge {
+    font-size: 1.05rem;
+    padding: 5px 16px;
+  }
+
   .game-arena {
     display: grid;
     grid-template-columns: 240px 1fr 300px;
@@ -2594,7 +2626,7 @@ input[type="text"]:focus {
 
   /* Waiting room player slots on tablet */
   .slots-grid {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(4, 1fr);
   }
 
   /* Word choice cards layout on tablet/mobile */

@@ -38,6 +38,7 @@
 
     currentView: 'lobby', // 'lobby', 'waiting', 'game', 'gameover'
     isDrawer: false,
+    currentDrawerName: '',
     currentWord: null,
     turnTimerInterval: null,
     roundEndTimerInterval: null,
@@ -94,6 +95,7 @@
     els.timerText = document.getElementById('timer-text');
     els.wordDisplay = document.getElementById('word-display');
     els.wordCategoryBadge = document.getElementById('word-category-badge');
+    els.wordDrawerBadge = document.getElementById('word-drawer-badge');
     els.gameWordBar = document.getElementById('game-word-bar');
     els.btnMute = document.getElementById('btn-mute');
     els.btnGameMute = document.getElementById('btn-game-mute');
@@ -377,12 +379,18 @@
     if (typeof opts.isDrawer === 'boolean') {
       state.isDrawer = opts.isDrawer;
     }
+    if (opts.drawerName !== undefined) {
+      state.currentDrawerName = opts.drawerName;
+    }
     const wordBar = els.gameWordBar || document.getElementById('game-word-bar');
     if (wordBar) {
       wordBar.classList.toggle('is-drawer-banner', !!state.isDrawer);
     }
 
     if (state.isDrawer) {
+      if (els.wordDrawerBadge) {
+        els.wordDrawerBadge.style.display = 'none';
+      }
       const activeWord = opts.word || (state.currentWord ? state.currentWord.word : '');
       const activeCategory = opts.category || (state.currentWord ? state.currentWord.category : '');
       if (els.wordDisplay) {
@@ -401,6 +409,15 @@
         reminderEl.textContent = activeWord || '---';
       }
     } else {
+      if (els.wordDrawerBadge) {
+        const dName = opts.drawerName || state.currentDrawerName || '';
+        if (dName) {
+          els.wordDrawerBadge.textContent = `🎨 ${dName} در حال نقاشی است`;
+          els.wordDrawerBadge.style.display = 'inline-flex';
+        } else {
+          els.wordDrawerBadge.style.display = 'none';
+        }
+      }
       const activeMasked = opts.masked !== undefined ? opts.masked : (els.wordDisplay ? els.wordDisplay.textContent : '---');
       let cat = opts.category !== undefined ? opts.category : (els.wordCategoryBadge ? els.wordCategoryBadge.textContent : '');
       if (typeof cat === 'string' && cat.startsWith('دسته‌بندی: ')) {
@@ -461,7 +478,7 @@
       const statusText = isLobby ? 'در انتظار بازیکن ⏳' : 'در حال مسابقه 🔒';
       const statusClass = isLobby ? 'status-lobby' : 'status-ingame';
       const pCount = r.playerCount || 1;
-      const maxP = r.maxPlayers || 6;
+      const maxP = r.maxPlayers || 8;
       const isFull = pCount >= maxP;
       const canJoin = isLobby && !isFull;
 
@@ -1166,6 +1183,10 @@
         }
       }
 
+      if (roomState.drawer && roomState.drawer.name) {
+        state.currentDrawerName = roomState.drawer.name;
+      }
+
       if (state.isDrawer) {
         updateWordBanner({
           isDrawer: true,
@@ -1176,7 +1197,8 @@
         updateWordBanner({
           isDrawer: false,
           masked: roomState.maskedWord,
-          category: roomState.wordCategory || ''
+          category: roomState.wordCategory || '',
+          drawerName: state.currentDrawerName
         });
       }
     }
@@ -1221,6 +1243,7 @@
 
     const data = state.gameRoom.startWordSelection();
     const drawer = data.drawer;
+    state.currentDrawerName = drawer ? drawer.name : '';
     state.isDrawer = (drawer.id === state.myPlayerId);
 
     // Broadcast GAME_STARTED and full ROOM_STATE so all players transition to game screen
@@ -1243,7 +1266,12 @@
     if (state.isDrawer) {
       updateWordBanner({ isDrawer: true, word: '', category: '' });
     } else {
-      updateWordBanner({ isDrawer: false, masked: `${drawer.name} در حال انتخاب کلمه است...`, category: '' });
+      updateWordBanner({
+        isDrawer: false,
+        masked: `${drawer.name} در حال انتخاب کلمه است...`,
+        category: '',
+        drawerName: drawer.name
+      });
     }
 
     if (state.isDrawer) {
@@ -1411,6 +1439,7 @@
     }
 
     state.isDrawer = (data.drawerId === state.myPlayerId);
+    state.currentDrawerName = data.drawerName || '';
 
     if (state.canvas) {
       state.canvas.clear(false);
@@ -1433,7 +1462,8 @@
       updateWordBanner({
         isDrawer: false,
         masked: data.masked || '---',
-        category: data.category || ''
+        category: data.category || '',
+        drawerName: data.drawerName || ''
       });
     }
 
@@ -1652,7 +1682,7 @@
 
         const statusTag = isDisc
           ? '<span style="color: #f87171; font-size: 0.75rem;">(قطع ارتباط ⏳)</span>'
-          : (isDrawer ? '✏️' : (p.guessedThisRound ? '✅' : ''));
+          : (isDrawer ? '<span class="drawer-active-tag">✏️ در حال نقاشی</span>' : (p.guessedThisRound ? '✅' : ''));
 
         item.innerHTML = `
           <div class="score-rank">#${idx + 1}</div>
