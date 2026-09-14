@@ -38,15 +38,19 @@ abstractTerms.forEach(term => {
   assert.strictEqual(wordsSet.has(term), false, `Abstract term "${term}" must NOT exist in physical dictionary`);
 });
 
-// 4. Verify no glued phrases like دستگاه... or ...بزرگ
+// 4. Verify strictly NO glued phrases like دستگاهفرز, سیمچین, پیچگوشتی, چرخگوشت, شیرآب
 WordBank.WORDS.forEach(w => {
   assert.ok(!w.word.includes('دستگاهفرز'), 'Must not contain glued machinery compounds');
-  assert.ok(!w.word.includes('کابلبرق'), 'Must not contain glued cables');
+  assert.ok(!w.word.includes('سنگفرز'), 'Must not contain glued grinders');
+  assert.ok(!w.word.includes('سیمچین'), 'Must not contain glued tools');
+  assert.ok(!w.word.includes('پیچگوشتی'), 'Must not contain glued screwdrivers');
+  assert.ok(!w.word.includes('چرخگوشت'), 'Must not contain glued appliances');
+  assert.ok(!w.word.includes('شیرآب'), 'Must not contain glued fixtures');
   assert.ok(!w.word.includes(' '), 'Zero spaces');
   assert.ok(!w.word.includes('\u200C'), 'Zero ZWNJ');
-  assert.ok(w.word.length <= 11, `Word "${w.word}" is suspiciously long`);
+  assert.ok(w.word.length <= 10, `Word "${w.word}" is suspiciously long`);
 });
 
-assert.strictEqual(WordBank.WORDS.length, 2400, 'Word bank must have exactly 2400 curated words');
+assert.strictEqual(WordBank.WORDS.length, 990, 'Word bank must have exactly 990 curated words');
 
 console.log('✅ Invite link auto-join & physical dictionary verification passed 100%!');

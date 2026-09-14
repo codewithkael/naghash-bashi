@@ -1,3 +1,4 @@
 deploy_gh.js
 *.log
 .system_generated/
+.idea/

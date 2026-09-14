@@ -369,8 +369,13 @@
       const normTarget = WordBank.normalizeCompact(this.currentWord.word);
 
       // Drawer cannot guess and cannot leak the secret word!
+      const wordsInGuess = WordBank.normalizePersian(guessText).split(/\s+/).map(w => WordBank.normalizeCompact(w));
+      const isSpoiler = (normGuess === normTarget) ||
+        wordsInGuess.includes(normTarget) ||
+        (normTarget.length >= 4 && normGuess.includes(normTarget));
+
       if (drawer && drawer.id === playerId) {
-        if (normTarget.length >= 2 && normGuess.includes(normTarget)) {
+        if (isSpoiler) {
           return { type: 'DRAWER_SPOILER_BLOCKED', player, text: guessText };
         }
         return { type: 'CHAT', player, text: guessText };
@@ -378,14 +383,14 @@
 
       // If player already guessed correctly this round
       if (player.guessedThisRound) {
-        if (normTarget.length >= 2 && normGuess.includes(normTarget)) {
+        if (isSpoiler) {
           return { type: 'ALREADY_GUESSED_SPOILER', player, text: guessText };
         }
         return { type: 'ALREADY_GUESSED', player, text: guessText };
       }
 
       const evalResult = WordBank.checkGuess(guessText, this.currentWord.word);
-      const isWordMatch = evalResult.isCorrect || (normTarget.length >= 2 && normGuess.includes(normTarget));
+      const isWordMatch = evalResult.isCorrect || isSpoiler;
 
       if (isWordMatch) {
         player.guessedThisRound = true;
