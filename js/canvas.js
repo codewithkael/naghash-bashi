@@ -277,7 +277,25 @@
       this.ctx.fillStyle = '#ffffff';
       this.ctx.fillRect(0, 0, this.logicalWidth, this.logicalHeight);
       if (save) {
-        this.saveHistory({ type: 'CLEAR' });
+        // Only record CLEAR in history if there are prior active drawing strokes in this turn
+        if (this.history.length > 0 && this.history[this.history.length - 1].type !== 'CLEAR') {
+          this.saveHistory({ type: 'CLEAR' });
+        }
+      }
+    }
+
+    /**
+     * Completely reset canvas and wipe history for a brand new turn.
+     * Prevents previous drawer's strokes from being restored by Undo.
+     */
+    resetForNewTurn() {
+      this.history = [];
+      this.remoteStroke = null;
+      this.lastPoint = null;
+      this.isDrawing = false;
+      if (this.ctx) {
+        this.ctx.fillStyle = '#ffffff';
+        this.ctx.fillRect(0, 0, this.logicalWidth, this.logicalHeight);
       }
     }
 
@@ -395,6 +413,9 @@
             this.history = [...action.history];
             this.redrawFromHistory();
           }
+          break;
+        case 'RESET_TURN':
+          this.resetForNewTurn();
           break;
       }
     }

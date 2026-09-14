@@ -767,10 +767,12 @@
         const res = state.gameRoom.submitGuess(packet.senderId, packet.text);
         if (res.type === 'CORRECT') {
           SoundEngine.playCorrectGuess();
+          const dBonus = res.drawerBonus ? ` | +${toPersianDigits(res.drawerBonus)} پاداش نقاش` : '';
+          const diffBadge = res.difficulty === 'hard' ? ' 🔥' : (res.difficulty === 'medium' ? ' ⭐' : '');
           const chatMsg = {
             sender: 'سیستم',
             avatar: '🎉',
-            text: `${res.player.name} کلمه را درست حدس زد! (+${res.points} امتیاز)`,
+            text: `${res.player.name} کلمه را درست حدس زد! (+${toPersianDigits(res.points)} امتیاز${dBonus})${diffBadge}`,
             isSystem: true,
             isCorrect: true
           };
@@ -913,7 +915,7 @@
     els.overlayWaitingChoice.classList.remove('active');
     els.overlayRoundEnd.classList.remove('active');
     if (state.canvas) {
-      state.canvas.clear(false);
+      state.canvas.resetForNewTurn();
       state.canvas.setInteractive(false);
     }
     closeAllDrawers();
@@ -947,7 +949,7 @@
     els.overlayWaitingChoice.classList.remove('active');
     els.overlayRoundEnd.classList.remove('active');
     if (state.canvas) {
-      state.canvas.clear(false);
+      state.canvas.resetForNewTurn();
       state.canvas.setInteractive(false);
     }
     closeAllDrawers();
@@ -1101,9 +1103,13 @@
     saveSession({ roomCode: roomState.roomCode, currentView: state.currentView });
 
     // Catch up canvas history for guest or reconnecting player
-    if (inActiveGame && state.canvas && Array.isArray(roomState.canvasHistory) && roomState.canvasHistory.length > 0) {
-      if (!state.canvas.history || state.canvas.history.length !== roomState.canvasHistory.length) {
-        state.canvas.applyRemoteAction({ type: 'FULL_SYNC', history: roomState.canvasHistory });
+    if (inActiveGame && state.canvas && Array.isArray(roomState.canvasHistory)) {
+      if (roomState.canvasHistory.length > 0) {
+        if (!state.canvas.history || state.canvas.history.length !== roomState.canvasHistory.length) {
+          state.canvas.applyRemoteAction({ type: 'FULL_SYNC', history: roomState.canvasHistory });
+        }
+      } else if (state.canvas.history && state.canvas.history.length > 0) {
+        state.canvas.resetForNewTurn();
       }
     }
 
@@ -1257,7 +1263,7 @@
     broadcastRoomState();
 
     if (state.canvas) {
-      state.canvas.clear(false);
+      state.canvas.resetForNewTurn();
       state.canvas.setInteractive(state.isDrawer);
     }
     updateToolbarsState();
@@ -1326,11 +1332,22 @@
       card.type = 'button';
       card.className = `word-choice-card difficulty-${c.difficulty}`;
 
-      const diffLabel = c.difficulty === 'easy' ? 'آسان (۱۰۰ امتیاز)' : (c.difficulty === 'medium' ? 'متوسط (۲۵۰ امتیاز)' : 'سخت (۴۰۰ امتیاز)');
+      let diffTitle = 'آسان (ساده)';
+      let drawerReward = '+۶۰ پاداش نقاش';
+
+      if (c.difficulty === 'medium') {
+        diffTitle = 'متوسط (پیشنهادی ⭐)';
+        drawerReward = '+۱۰۰ پاداش نقاش';
+      } else if (c.difficulty === 'hard') {
+        diffTitle = 'سخت (چالش طلایی 🔥)';
+        drawerReward = '+۱۶۰ پاداش نقاش';
+      }
+
       card.innerHTML = `
-        <div class="card-word">${c.word}</div>
-        <div class="card-category">${c.category}</div>
-        <div class="card-diff">${diffLabel}</div>
+        <div class="card-word">${escapeHtml(c.word)}</div>
+        <div class="card-category">${escapeHtml(c.category)}</div>
+        <div class="card-diff">${diffTitle}</div>
+        <div class="card-bonus">🎨 ${drawerReward}</div>
       `;
 
       card.addEventListener('click', () => {
@@ -1339,7 +1356,7 @@
         state.isDrawer = true;
 
         if (state.canvas) {
-          state.canvas.clear(false);
+          state.canvas.resetForNewTurn();
           state.canvas.setInteractive(true);
         }
         updateToolbarsState();
@@ -1442,7 +1459,7 @@
     state.currentDrawerName = data.drawerName || '';
 
     if (state.canvas) {
-      state.canvas.clear(false);
+      state.canvas.resetForNewTurn();
       state.canvas.setInteractive(state.isDrawer);
     }
 
@@ -1498,7 +1515,7 @@
     els.overlayWaitingChoice.classList.remove('active');
 
     if (state.canvas) {
-      state.canvas.clear(false);
+      state.canvas.resetForNewTurn();
       state.canvas.setInteractive(true);
     }
 

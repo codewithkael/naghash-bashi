@@ -40,15 +40,15 @@ assert.strictEqual(room.status, 'CHOOSING');
 assert.strictEqual(room.wordChoices.length, 3);
 console.log('✓ Game started with 3 word choices for drawer.');
 
-// 6. Drawer Selects Word
+// 6. Drawer Selects Word (wordChoices[0] is Easy)
 const drawer = room.getDrawer();
 assert.strictEqual(drawer.id, 'p1', 'First drawer should be host p1');
-const chosenWord = room.wordChoices[1];
+const chosenWord = room.wordChoices[0];
 const drawStart = room.selectWord(chosenWord);
 assert.strictEqual(room.status, 'DRAWING');
 assert.strictEqual(room.currentWord.word, chosenWord.word);
 assert.strictEqual(room.timerSeconds, 60);
-console.log(`✓ Word "${chosenWord.word}" selected, timer set to 60s.`);
+console.log(`✓ Word "${chosenWord.word}" (${chosenWord.difficulty}) selected, timer set to 60s.`);
 
 // 7. Test Guess Submission
 // Guess by drawer should not score (spoiler blocked for secret word)
@@ -66,7 +66,7 @@ const correctGuess = room.submitGuess('p2', chosenWord.word);
 assert.strictEqual(correctGuess.type, 'CORRECT');
 assert.ok(correctGuess.points >= 400, 'Fast guess should score 400+ points');
 assert.strictEqual(room.players.find(p => p.id === 'p2').score, correctGuess.points);
-assert.strictEqual(drawer.score, 60, 'Drawer should receive +60 bonus points');
+assert.strictEqual(drawer.score, 60, 'Easy word drawer should receive +60 bonus points');
 console.log(`✓ Guess correctly scored: +${correctGuess.points} to guesser, +60 to drawer.`);
 
 // 8. Re-guessing by same player
@@ -91,5 +91,32 @@ const nextRes = room.nextTurn();
 assert.strictEqual(room.status, 'CHOOSING');
 assert.strictEqual(room.getDrawer().id, 'p2', 'Next drawer must be p2');
 console.log('✓ Turn successfully passed to next drawer (p2).');
+
+// 11. Test Difficulty Bonus Scaling (Easy vs Medium vs Hard)
+// Medium word test
+const medRoom = new GameRoom('NB-MED', { id: 'm1', name: 'میزبان', avatar: '🎨' });
+medRoom.addPlayer({ id: 'm2', name: 'حدس‌زننده', avatar: '🦁' });
+medRoom.startGame();
+const medWord = { word: 'کامپیوتر', category: 'تکنولوژی', difficulty: 'medium' };
+medRoom.selectWord(medWord);
+const medGuess = medRoom.submitGuess('m2', medWord.word);
+assert.strictEqual(medGuess.type, 'CORRECT');
+assert.strictEqual(medGuess.drawerBonus, 100, 'Medium word drawer bonus must be 100');
+assert.strictEqual(medRoom.getDrawer().score, 100);
+assert.ok(medGuess.points >= 500, 'Medium fast guess should score 500+ points');
+console.log('✓ Medium difficulty bonus (+100 to drawer, 500+ to guesser) verified.');
+
+// Hard word test
+const hardRoom = new GameRoom('NB-HRD', { id: 'h1', name: 'میزبان', avatar: '🎨' });
+hardRoom.addPlayer({ id: 'h2', name: 'حدس‌زننده', avatar: '🦁' });
+hardRoom.startGame();
+const hardWord = { word: 'پالایشگاه', category: 'صنعت', difficulty: 'hard' };
+hardRoom.selectWord(hardWord);
+const hardGuess = hardRoom.submitGuess('h2', hardWord.word);
+assert.strictEqual(hardGuess.type, 'CORRECT');
+assert.strictEqual(hardGuess.drawerBonus, 160, 'Hard word drawer bonus must be 160');
+assert.strictEqual(hardRoom.getDrawer().score, 160);
+assert.ok(hardGuess.points >= 650, 'Hard fast guess should score 650+ points');
+console.log('✓ Hard difficulty bonus (+160 to drawer, 650+ to guesser) verified.');
 
 console.log('🎉 All GameRoom logic tests passed successfully!');

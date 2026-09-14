@@ -116,4 +116,15 @@ drawing.setupCanvas();
 assert.strictEqual(drawing.history.length, 1, 'setupCanvas must preserve history!');
 console.log('✓ setupCanvas preserves history and redraws instead of wiping canvas.');
 
+// 6. Test resetForNewTurn isolates turns and prevents undoing into previous round
+drawing.resetForNewTurn();
+assert.strictEqual(drawing.history.length, 0, 'resetForNewTurn must completely clear history');
+drawing.undo(); // Undo on clean turn must be a no-op!
+assert.strictEqual(drawing.history.length, 0, 'Undo on empty turn must remain empty without restoring past strokes');
+
+// 7. Test clearLocal on empty canvas does not inject redundant CLEAR into history
+drawing.clearLocal(true);
+assert.strictEqual(drawing.history.length, 0, 'clearLocal on blank canvas must not push redundant CLEAR');
+console.log('✓ Turn isolation & Undo safety thoroughly verified.');
+
 console.log('🎉 All Canvas History & Undo tests passed successfully!');

@@ -20,6 +20,28 @@
   const DRAWING_TIME = 60;     // seconds
   const ROUND_END_PAUSE = 5;   // seconds
 
+  // Difficulty-based scoring tiers: incentivizes drawer and guessers for harder words
+  const DIFFICULTY_CONFIG = {
+    easy: {
+      name: 'آسان',
+      drawerBonus: 60,
+      guesserBase: 100,
+      guesserTimeMax: 300
+    },
+    medium: {
+      name: 'متوسط',
+      drawerBonus: 100,
+      guesserBase: 200,
+      guesserTimeMax: 350
+    },
+    hard: {
+      name: 'سخت',
+      drawerBonus: 160,
+      guesserBase: 300,
+      guesserTimeMax: 400
+    }
+  };
+
   class GameRoom {
     constructor(roomCode, hostPlayerInfo, options = {}) {
       this.roomCode = roomCode;
@@ -370,16 +392,18 @@
         this.turnGuessesCount++;
 
         // Score calculation:
-        // Base 100 + time bonus (up to 400 proportional to remaining time)
-        // Faster guess = higher score! Max 500 pts.
+        // Scaled by word difficulty: easy (+60 drawer / 100-400 guesser), medium (+100 drawer / 200-550 guesser), hard (+160 drawer / 300-700 guesser)
+        const diff = (this.currentWord && this.currentWord.difficulty) || 'easy';
+        const diffConfig = DIFFICULTY_CONFIG[diff] || DIFFICULTY_CONFIG.easy;
+
         const timeFraction = Math.max(0, this.timerSeconds / DRAWING_TIME);
-        const guesserPoints = Math.round(100 + 400 * timeFraction);
+        const guesserPoints = Math.round(diffConfig.guesserBase + diffConfig.guesserTimeMax * timeFraction);
         player.roundScore = guesserPoints;
         player.score += guesserPoints;
 
-        // Drawer bonus: gets +60 points per successful guesser!
+        // Drawer bonus: scaled by word difficulty to strongly incentivize picking hard words!
+        const drawerBonus = diffConfig.drawerBonus;
         if (drawer) {
-          const drawerBonus = 60;
           drawer.roundScore = (drawer.roundScore || 0) + drawerBonus;
           drawer.score += drawerBonus;
         }
@@ -392,6 +416,8 @@
           type: 'CORRECT',
           player,
           points: guesserPoints,
+          drawerBonus,
+          difficulty: diff,
           allGuessed,
           turnEndData: allGuessed ? this.endTurn() : null
         };
@@ -543,6 +569,7 @@
     MIN_PLAYERS,
     WORD_SELECT_TIME,
     DRAWING_TIME,
+    DIFFICULTY_CONFIG,
     GameRoom
   };
 });
