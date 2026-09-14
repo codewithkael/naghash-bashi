@@ -291,8 +291,9 @@
     const roomFromUrl = urlParams.get('room');
     if (roomFromUrl && els.roomCodeInput) {
       const clean = toEnglishDigits(roomFromUrl).replace(/[^0-9]/g, '');
-      els.roomCodeInput.value = clean;
-      notify(`کد اتاق ${clean} از لینک دریافت شد! نام خود را انتخاب کرده و دکمه ورود را لمس کنید.`, 'info');
+      if (clean) {
+        els.roomCodeInput.value = clean;
+      }
     }
   }
 
@@ -372,6 +373,20 @@
     if (els.canvasChatList) {
       els.canvasChatList.innerHTML = '<div class="chat-empty-placeholder">در انتظار پیام‌ها و رویدادهای مسابقه...</div>';
     }
+  }
+
+  function clearUrlRoomParam() {
+    try {
+      if (window.history && window.history.replaceState) {
+        const url = new URL(window.location.href);
+        if (url.searchParams.has('room')) {
+          url.searchParams.delete('room');
+          const cleanQuery = url.searchParams.toString();
+          const cleanUrl = url.pathname + (cleanQuery ? `?${cleanQuery}` : '') + (url.hash || '');
+          window.history.replaceState({}, document.title, cleanUrl);
+        }
+      }
+    } catch (_) {}
   }
 
   // --- Dedicated Word Bar Controller ---
@@ -972,6 +987,7 @@
   // --- Waiting Room / Lobby Operations ---
   function createRoom() {
     if (!validatePlayerName()) return;
+    clearUrlRoomParam();
 
     state.isHost = true;
     state.roomCode = NetworkEngine.NetworkManager.generateRoomCode();
@@ -2050,6 +2066,7 @@
 
     els.btnLeaveWaiting.addEventListener('click', () => {
       clearSession();
+      clearUrlRoomParam();
       if (state.network) state.network.destroy();
       showView('lobby');
     });
@@ -2121,6 +2138,7 @@
     els.btnLeaveGame.addEventListener('click', () => {
       if (confirm('آیا مطمئن هستید که می‌خواهید از بازی خارج شوید؟')) {
         clearSession();
+        clearUrlRoomParam();
         closeAllDrawers();
         if (state.network) state.network.destroy();
         showView('lobby');
@@ -2147,6 +2165,7 @@
 
     els.btnBackLobby.addEventListener('click', () => {
       clearSession();
+      clearUrlRoomParam();
       closeAllDrawers();
       if (state.network) state.network.destroy();
       showView('lobby');
@@ -2217,8 +2236,27 @@
     updateMuteButton();
     initCanvas();
     bindEvents();
-
     showView('lobby');
+
+    // Auto-join directly when navigating via invite link (?room=XXXX)
+    const urlParams = new URLSearchParams(window.location.search);
+    const roomFromUrl = urlParams.get('room');
+    if (roomFromUrl) {
+      const clean = toEnglishDigits(roomFromUrl).replace(/[^0-9]/g, '');
+      if (clean && clean.length === 4) {
+        if (!state.myName || !state.myName.trim()) {
+          const defaultNames = ['نقاش ماهر', 'استاد قلم‌مو', 'هنرمند خلاق', 'پیکاسوی کوچک', 'رنگین‌کمان', 'طراح زبردست'];
+          state.myName = defaultNames[Math.floor(Math.random() * defaultNames.length)];
+          if (els.playerNameInput) els.playerNameInput.value = state.myName;
+          localStorage.setItem('naghash_player_name', state.myName);
+        }
+        if (els.roomCodeInput) els.roomCodeInput.value = clean;
+        notify(`🚀 در حال ورود مستقیم به اتاق ${toPersianDigits(clean)}...`, 'info');
+        setTimeout(() => {
+          joinRoom(clean);
+        }, 120);
+      }
+    }
 
     // Purge any legacy stale caches
     if (typeof caches !== 'undefined') {
